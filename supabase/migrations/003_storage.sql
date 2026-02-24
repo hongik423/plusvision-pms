@@ -106,8 +106,8 @@ SELECT
   split_part(name, '/', 1)            AS project_id,
   split_part(name, '/', 2)            AS stage_folder,
   COUNT(*)                            AS file_count,
-  SUM(metadata->>'size')::BIGINT      AS total_bytes,
-  ROUND(SUM(metadata->>'size')::BIGINT / 1048576.0, 2) AS total_mb,
+  SUM((metadata->>'size')::BIGINT)    AS total_bytes,
+  ROUND(SUM((metadata->>'size')::BIGINT) / 1048576.0, 2) AS total_mb,
   MIN(created_at)                     AS first_upload,
   MAX(created_at)                     AS last_upload
 FROM storage.objects
