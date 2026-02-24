@@ -14,12 +14,10 @@ export default withAuth(
     return NextResponse.next();
   },
   {
-    secret: process.env.NEXTAUTH_SECRET ?? "pluspms-dev-secret-only",
     pages: {
       signIn: "/login",
     },
     callbacks: {
-      // 로그인 여부만 확인 (역할 체크는 middleware 함수에서 수행)
       authorized: ({ token }) => !!token,
     },
   },

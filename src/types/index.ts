@@ -101,7 +101,7 @@ export interface Estimate {
   taxAmount: number;
   grandTotal: number;
   notes?: string;
-  status: 'DRAFT' | 'SUBMITTED' | 'APPROVED';
+  status: 'DRAFT' | 'SUBMITTED' | 'APPROVED'; // EstimateStatus enum
   createdById: string;
   createdAt: string;
   updatedAt: string;

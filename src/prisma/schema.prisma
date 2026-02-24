@@ -103,11 +103,12 @@ model Project {
   copiedFrom  Project?    @relation("ProjectCopy", fields: [copiedFromId], references: [id])
   copies      Project[]   @relation("ProjectCopy")
 
-  stages      ProjectStage[]
-  members     ProjectMember[]
-  estimates   Estimate[]
-  manuals     Manual[]
-  auditLogs   AuditLog[]
+  stages        ProjectStage[]
+  members       ProjectMember[]
+  estimates     Estimate[]
+  manuals       Manual[]
+  auditLogs     AuditLog[]
+  notifications Notification[]
 
   @@index([status])
   @@index([customerId])
@@ -115,6 +116,7 @@ model Project {
   @@index([processTypeId])
   @@index([itemTypeId])
   @@index([createdAt])
+  @@index([copiedFromId])
   @@map("projects")
 }
 
@@ -145,6 +147,7 @@ model ProjectStage {
   documents StageDocument[]
 
   @@unique([projectId, stageNumber])
+  @@index([projectId])
   @@index([assigneeId])
   @@index([status])
   @@map("project_stages")
@@ -191,10 +194,17 @@ model StageDocument {
 
   @@index([stageId])
   @@index([documentType])
+  @@index([externalId])
   @@map("stage_documents")
 }
 
 // ===== 견적서 =====
+
+enum EstimateStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+}
 
 model Estimate {
   id              String   @id @default(dbgenerated("('plusPMS_'::text || replace(gen_random_uuid()::text, '-'::text, ''::text))"))
@@ -206,7 +216,7 @@ model Estimate {
   taxAmount       Decimal  @default(0)
   grandTotal      Decimal  @default(0)
   notes           String?
-  status          String   @default("DRAFT")
+  status          EstimateStatus @default(DRAFT)
   createdById     String
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -235,6 +245,7 @@ model EstimateItem {
   estimate Estimate  @relation(fields: [estimateId], references: [id], onDelete: Cascade)
   partSpec PartSpec? @relation(fields: [partSpecId], references: [id])
 
+  @@index([estimateId])
   @@map("estimate_items")
 }
 
@@ -359,6 +370,7 @@ model PartSpec {
 model Notification {
   id        String   @id @default(dbgenerated("('plusPMS_'::text || replace(gen_random_uuid()::text, '-'::text, ''::text))"))
   userId    String
+  projectId String?
   type      String
   title     String
   message   String
@@ -366,9 +378,11 @@ model Notification {
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id])
+  user    User     @relation(fields: [userId], references: [id])
+  project Project? @relation(fields: [projectId], references: [id])
 
   @@index([userId, isRead])
+  @@index([projectId])
   @@index([createdAt])
   @@map("notifications")
 }

@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { EstimateStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { generatePlusPmsId } from "@/lib/id";
 
@@ -79,7 +79,7 @@ export async function updateEstimate(
   input: Partial<{
     title: string;
     notes: string;
-    status: string;
+    status: EstimateStatus;
   }>,
 ) {
   return prisma.estimate.update({

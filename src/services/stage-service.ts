@@ -48,6 +48,7 @@ export async function assignStage({
     data: {
       id: generatePlusPmsId("notification"),
       userId: assigneeId,
+      projectId,
       type: "STAGE_ASSIGNED",
       title: `${stageNumber}단계 담당자 배정`,
       message: "새로운 단계 담당자로 지정되었습니다.",
@@ -146,6 +147,7 @@ export async function completeStage({
             data: {
               id: generatePlusPmsId("notification"),
               userId: nextStage.assigneeId,
+              projectId,
               type: "NEXT_STAGE_READY",
               title: `${stageNumber + 1}단계 진행 가능`,
               message: "이전 단계가 완료되어 다음 단계를 시작할 수 있습니다.",
