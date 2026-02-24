@@ -1,21 +1,19 @@
-import { getToken } from "next-auth/jwt";
 import { NextResponse, type NextRequest } from "next/server";
 
-export async function middleware(req: NextRequest) {
-  const secret = process.env.NEXTAUTH_SECRET ?? "pluspms-dev-secret-only";
-  const token = await getToken({ req, secret });
+export function middleware(req: NextRequest) {
+  // 세션 쿠키 존재 여부 확인 (HTTPS: __Secure- 접두사, HTTP: 일반)
+  const sessionToken =
+    req.cookies.get("__Secure-next-auth.session-token")?.value ??
+    req.cookies.get("next-auth.session-token")?.value;
 
-  if (!token) {
+  if (!sessionToken) {
     const loginUrl = new URL("/login", req.url);
     loginUrl.searchParams.set("callbackUrl", req.nextUrl.pathname);
     return NextResponse.redirect(loginUrl);
   }
 
-  // /admin/** 경로는 ADMIN 역할만 접근 허용
-  if (req.nextUrl.pathname.startsWith("/admin") && token.role !== "ADMIN") {
-    return NextResponse.redirect(new URL("/dashboard?error=forbidden", req.url));
-  }
-
+  // 실제 JWT 검증 및 역할 확인은 (protected)/layout.tsx의
+  // getServerSession(authOptions) 에서 서버사이드로 처리됨
   return NextResponse.next();
 }
 
