@@ -1,0 +1,20 @@
+[
+  {
+    "id": "pluspms_estimate_default",
+    "type": "ESTIMATE",
+    "name": "기본 견적 템플릿",
+    "titleTemplate": "{{projectName}} 견적서",
+    "bodyTemplate": "고객사: {{customerName}}\n사업장: {{siteName}}\n공정: {{processTypeName}}\n품목: {{itemTypeName}}\n\n아래 항목 기준으로 견적을 산정합니다.",
+    "isActive": true,
+    "updatedAt": "2026-02-24T00:00:00.000Z"
+  },
+  {
+    "id": "pluspms_proposal_default",
+    "type": "PROPOSAL",
+    "name": "기본 제안서 템플릿",
+    "titleTemplate": "{{projectName}} 제안서",
+    "bodyTemplate": "1. 컨셉\n- {{projectName}} 프로젝트 수행을 위한 기본 제안입니다.\n\n2. 운전 계획\n- 고객 요구사항에 맞춘 단계별 수행 계획을 제시합니다.\n\n3. 사양\n- 공정: {{processTypeName}}\n- 품목: {{itemTypeName}}\n\n4. 금액\n- 견적서와 연계하여 제시합니다.",
+    "isActive": true,
+    "updatedAt": "2026-02-24T00:00:00.000Z"
+  }
+]

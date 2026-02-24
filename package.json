@@ -1,0 +1,19 @@
+{
+  "name": "plusvision-pms-root",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix src run dev",
+    "build": "npm --prefix src run build",
+    "start": "npm --prefix src run start",
+    "lint": "npm --prefix src run lint",
+    "type-check": "npm --prefix src run type-check",
+    "test": "npm --prefix src run test",
+    "check": "npm --prefix src run check",
+    "db:push": "npm --prefix src run db:push",
+    "db:migrate": "npm --prefix src run db:migrate",
+    "db:seed": "npm --prefix src run db:seed",
+    "db:studio": "npm --prefix src run db:studio",
+    "migration:dry-run": "npm --prefix src run migration:dry-run",
+    "migration:verify": "npm --prefix src run migration:verify"
+  }
+}

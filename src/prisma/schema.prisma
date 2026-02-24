@@ -1,0 +1,397 @@
+// PlusPMS Prisma Schema
+// 실행: npx prisma migrate dev --name init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===== 사용자 =====
+
+enum Role {
+  ADMIN
+  MANAGER
+  USER
+  VIEWER
+}
+
+model User {
+  id            String    @id @default(dbgenerated("('plusPMS_'::text || replace(gen_random_uuid()::text, '-'::text, ''::text))"))
+  email         String    @unique
+  name          String
+  password      String?
+  role          Role      @default(USER)
+  department    String?
+  phone         String?
+  profileImage  String?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts        Account[]
+  projectMembers  ProjectMember[]
+  assignedStages  ProjectStage[]
+  notifications   Notification[]
+  auditLogs       AuditLog[]
+  createdProjects Project[]        @relation("ProjectCreator")
+  uploadedDocs    StageDocument[]
+  createdEstimates Estimate[]
+  createdManuals  Manual[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(dbgenerated("('plusPMS_'::text || replace(gen_random_uuid()::text, '-'::text, ''::text))"))
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+// ===== 프로젝트 =====
+
+enum ProjectStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+  HOLD
+  CANCELLED
+}
+
+model Project {
+  id              String        @id @default(dbgenerated("('plusPMS_'::text || replace(gen_random_uuid()::text, '-'::text, ''::text))"))
+  projectNumber   String        @unique
+  name            String
+  description     String?
+  status          ProjectStatus @default(PENDING)
+  currentStage    Int           @default(1)
+  customerId      String
+  siteId          String
+  processTypeId   String
+  itemTypeId      String
+  bondNumber      String?
+  bondRegistered  Boolean       @default(false)
+  startDate       DateTime?
+  dueDate         DateTime?
+  completedDate   DateTime?
+  createdById     String
+  copiedFromId    String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  customer    Customer    @relation(fields: [customerId], references: [id])
+  site        Site        @relation(fields: [siteId], references: [id])
+  processType ProcessType @relation(fields: [processTypeId], references: [id])
+  itemType    ItemType    @relation(fields: [itemTypeId], references: [id])
+  createdBy   User        @relation("ProjectCreator", fields: [createdById], references: [id])
+  copiedFrom  Project?    @relation("ProjectCopy", fields: [copiedFromId], references: [id])
+  copies      Project[]   @relation("ProjectCopy")
+
+  stages      ProjectStage[]
+  members     ProjectMember[]
+  estimates   Estimate[]
+  manuals     Manual[]
+  auditLogs   AuditLog[]
+
+  @@index([status])
+  @@index([customerId])
+  @@index([siteId])
+  @@index([processTypeId])
+  @@index([itemTypeId])
+  @@index([createdAt])
+  @@map("projects")
+}
+
+// ===== 프로젝트 단계 =====
+
+enum StageStatus {
+  INACTIVE
+  ACTIVE
+  COMPLETED
+  SKIPPED
+}
+
+model ProjectStage {
+  id            String      @id @default(dbgenerated("('plusPMS_'::text || replace(gen_random_uuid()::text, '-'::text, ''::text))"))
+  projectId     String
+  stageNumber   Int
+  stageName     String
+  status        StageStatus @default(INACTIVE)
+  assigneeId    String?
+  startDate     DateTime?
+  completedDate DateTime?
+  notes         String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  project   Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignee  User?           @relation(fields: [assigneeId], references: [id])
+  documents StageDocument[]
+
+  @@unique([projectId, stageNumber])
+  @@index([assigneeId])
+  @@index([status])
+  @@map("project_stages")
+}
+
+// ===== 문서 =====
+
+enum DocumentType {
+  PROPOSAL
+  ESTIMATE
+  MANUFACTURE_MANUAL
+  INSTALL_MANUAL
+  PARTS_LIST
+  SITE_PHOTO
+  DRAWING
+  MEETING_NOTE
+  EXPORT_RECORD
+  OTHER
+}
+
+enum StorageType {
+  SUPABASE
+  GOOGLE_DRIVE
+}
+
+model StageDocument {
+  id            String       @id @default(dbgenerated("('plusPMS_'::text || replace(gen_random_uuid()::text, '-'::text, ''::text))"))
+  stageId       String
+  documentType  DocumentType
+  fileName      String
+  fileUrl       String
+  fileSize      Int
+  mimeType      String
+  version       Int          @default(1)
+  description   String?
+  storageType   StorageType  @default(SUPABASE)
+  externalId    String?
+  uploadedById  String
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  stage      ProjectStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  uploadedBy User         @relation(fields: [uploadedById], references: [id])
+
+  @@index([stageId])
+  @@index([documentType])
+  @@map("stage_documents")
+}
+
+// ===== 견적서 =====
+
+model Estimate {
+  id              String   @id @default(dbgenerated("('plusPMS_'::text || replace(gen_random_uuid()::text, '-'::text, ''::text))"))
+  projectId       String
+  estimateNumber  String   @unique
+  version         Int      @default(1)
+  title           String
+  totalAmount     Decimal  @default(0)
+  taxAmount       Decimal  @default(0)
+  grandTotal      Decimal  @default(0)
+  notes           String?
+  status          String   @default("DRAFT")
+  createdById     String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  project   Project        @relation(fields: [projectId], references: [id])
+  createdBy User           @relation(fields: [createdById], references: [id])
+  items     EstimateItem[]
+
+  @@index([projectId])
+  @@map("estimates")
+}
+
+model EstimateItem {
+  id            String   @id @default(dbgenerated("('plusPMS_'::text || replace(gen_random_uuid()::text, '-'::text, ''::text))"))
+  estimateId    String
+  partSpecId    String?
+  itemName      String
+  specification String?
+  unit          String   @default("EA")
+  quantity      Decimal
+  unitPrice     Decimal
+  amount        Decimal
+  sortOrder     Int      @default(0)
+  remarks       String?
+
+  estimate Estimate  @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  partSpec PartSpec? @relation(fields: [partSpecId], references: [id])
+
+  @@map("estimate_items")
+}
+
+// ===== 매뉴얼 =====
+
+enum ManualType {
+  MANUFACTURE
+  INSTALL
+}
+
+model Manual {
+  id          String     @id @default(dbgenerated("('plusPMS_'::text || replace(gen_random_uuid()::text, '-'::text, ''::text))"))
+  projectId   String
+  type        ManualType
+  title       String
+  content     String     @db.Text
+  version     Int        @default(1)
+  createdById String
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  project   Project @relation(fields: [projectId], references: [id])
+  createdBy User    @relation(fields: [createdById], references: [id])
+
+  @@index([projectId])
+  @@map("manuals")
+}
+
+// ===== 프로젝트 멤버 =====
+
+model ProjectMember {
+  id        String   @id @default(dbgenerated("('plusPMS_'::text || replace(gen_random_uuid()::text, '-'::text, ''::text))"))
+  projectId String
+  userId    String
+  role      String   @default("MEMBER")
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([projectId, userId])
+  @@map("project_members")
+}
+
+// ===== 마스터 데이터 =====
+
+model Customer {
+  id        String   @id @default(dbgenerated("('plusPMS_'::text || replace(gen_random_uuid()::text, '-'::text, ''::text))"))
+  name      String   @unique
+  code      String   @unique
+  contact   String?
+  phone     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projects Project[]
+
+  @@map("customers")
+}
+
+model Site {
+  id        String   @id @default(dbgenerated("('plusPMS_'::text || replace(gen_random_uuid()::text, '-'::text, ''::text))"))
+  name      String   @unique
+  code      String   @unique
+  address   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projects Project[]
+
+  @@map("sites")
+}
+
+model ProcessType {
+  id        String   @id @default(dbgenerated("('plusPMS_'::text || replace(gen_random_uuid()::text, '-'::text, ''::text))"))
+  name      String   @unique
+  code      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projects Project[]
+
+  @@map("process_types")
+}
+
+model ItemType {
+  id        String   @id @default(dbgenerated("('plusPMS_'::text || replace(gen_random_uuid()::text, '-'::text, ''::text))"))
+  name      String   @unique
+  code      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  projects Project[]
+
+  @@map("item_types")
+}
+
+model PartSpec {
+  id            String   @id @default(dbgenerated("('plusPMS_'::text || replace(gen_random_uuid()::text, '-'::text, ''::text))"))
+  category      String
+  name          String
+  specification String
+  unit          String   @default("EA")
+  unitPrice     Decimal?
+  manufacturer  String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  estimateItems EstimateItem[]
+
+  @@index([category])
+  @@map("part_specs")
+}
+
+// ===== 알림 =====
+
+model Notification {
+  id        String   @id @default(dbgenerated("('plusPMS_'::text || replace(gen_random_uuid()::text, '-'::text, ''::text))"))
+  userId    String
+  type      String
+  title     String
+  message   String
+  link      String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+// ===== 감사 로그 =====
+
+model AuditLog {
+  id         String   @id @default(dbgenerated("('plusPMS_'::text || replace(gen_random_uuid()::text, '-'::text, ''::text))"))
+  userId     String
+  projectId  String?
+  action     String
+  entityType String
+  entityId   String
+  changes    Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  user    User     @relation(fields: [userId], references: [id])
+  project Project? @relation(fields: [projectId], references: [id])
+
+  @@index([userId])
+  @@index([projectId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

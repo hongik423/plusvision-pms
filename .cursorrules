@@ -1,0 +1,132 @@
+# PlusPMS - Cursor AI 개발 규칙
+
+## 프로젝트 개요
+플러스비젼(PlusVision) 프로젝트 관리 시스템.
+반도체 공정 설비 제작·수리·설치 프로젝트를 10단계 표준 프로세스로 관리하는 웹 앱.
+
+## 기술 스택
+- **Framework**: Next.js 14 (App Router) + TypeScript
+- **Styling**: Tailwind CSS + shadcn/ui
+- **Database**: PostgreSQL via Prisma ORM (Supabase 호스팅)
+- **Auth**: NextAuth.js (Credentials + Google Provider)
+- **File Storage**: Supabase Storage
+- **State**: Zustand
+- **Validation**: Zod
+
+## 핵심 규칙
+
+### 1. 코드 스타일
+- 모든 코드에 TypeScript 사용 (strict mode)
+- 함수형 컴포넌트 + React hooks 사용
+- `"use client"` 는 필요한 컴포넌트에만 명시
+- Server Components를 기본으로 사용하고, 클라이언트 인터랙션이 필요할 때만 Client Component
+- 네이밍: 파일은 kebab-case, 컴포넌트는 PascalCase, 함수/변수는 camelCase
+- import 순서: React/Next → 외부 라이브러리 → 내부 모듈 → 상대 경로
+
+### 2. 프로젝트 구조
+- `src/app/` — Next.js App Router 페이지 및 API Routes
+- `src/components/` — 재사용 컴포넌트 (ui/, layout/, project/, document/, estimate/, dashboard/, admin/, common/)
+- `src/lib/` — 유틸리티, 설정, 검증 스키마
+- `src/hooks/` — 커스텀 React hooks
+- `src/store/` — Zustand 상태 관리
+- `src/types/` — TypeScript 타입 정의
+- `src/services/` — API 호출 서비스 레이어
+- `prisma/` — DB 스키마 및 마이그레이션
+
+### 3. DB / Prisma
+- Prisma Client는 `src/lib/prisma.ts`의 싱글톤 사용
+- 모든 테이블은 `id` (cuid), `createdAt`, `updatedAt` 포함
+- 데이터 삭제는 soft delete 고려 (isActive 필드)
+- 관계 정의 시 onDelete: Cascade 또는 SetNull 명시적 설정
+- 쿼리 시 select/include를 명시하여 필요한 필드만 조회
+
+### 4. API Routes
+- 경로: `/api/v1/[resource]`
+- 응답 형식: `{ success: boolean, data?: any, error?: { code, message }, meta?: { page, limit, total } }`
+- Zod로 입력 검증, try-catch로 에러 핸들링
+- 권한 체크: 각 API에서 세션 확인 후 역할(ADMIN/MANAGER/USER/VIEWER) 검증
+- CRUD 변경 시 AuditLog 자동 기록
+
+### 5. 프로젝트 10단계 규칙
+```
+1: 의뢰 접수 → 2: 담당자 지정 → 3: 고객 협의 → 4: 진행 여부 결정
+→ 5: 채권 등록 → 6: 견적 작성 → 7: 제작 → 8: 납품/설치
+→ 9: 실적 입력 → 10: 최종 문서 정리
+```
+- 프로젝트 생성 시 10단계 자동 생성 (1단계는 ACTIVE, 나머지 INACTIVE)
+- 이전 단계 완료 후 다음 단계 진행 가능 (순차)
+- 단계 완료 시 다음 담당자에게 자동 알림
+- 4단계에서 보류/취소 결정 가능
+
+### 6. 권한 체계 (RBAC)
+- ADMIN: 전체 접근, 삭제 가능, 마스터 데이터 관리, 사용자 관리
+- MANAGER: 전체 프로젝트 조회/생성/수정, 담당자 배정
+- USER: 자신이 담당하는 프로젝트만 조회/수정, 문서 업로드
+- VIEWER: 읽기 전용
+- 삭제 권한은 ADMIN만 보유
+
+### 7. UI / 컴포넌트 규칙
+- shadcn/ui 컴포넌트 우선 사용
+- 사용자 연령대를 고려한 큰 글씨(본문 16px), 넉넉한 여백, 명확한 레이블
+- 입력 필드 높이: 최소 44px (터치 친화적)
+- 아이콘+텍스트 병기 원칙
+- 삭제 등 위험 액션은 반드시 확인 모달 표시
+- 빈 상태(empty state)에 안내 문구 표시
+- 핵심 UI: StepStepper (10단계 시각화 컴포넌트)
+
+### 8. 한국어 우선
+- 모든 UI 라벨, 메시지, 에러 텍스트는 한국어
+- 코드 주석은 한국어 허용
+- 변수명/함수명은 영어 유지
+
+### 9. 주요 상수 (src/lib/constants.ts)
+```typescript
+export const STAGE_NAMES = {
+  1: '의뢰 접수',
+  2: '담당자 지정',
+  3: '고객 협의',
+  4: '진행 여부 결정',
+  5: '채권 등록',
+  6: '견적 작성',
+  7: '제작',
+  8: '납품/설치',
+  9: '실적 입력',
+  10: '최종 문서 정리',
+} as const;
+
+export const PROJECT_STATUS_LABELS = {
+  PENDING: '대기',
+  ACTIVE: '진행중',
+  COMPLETED: '완료',
+  HOLD: '보류',
+  CANCELLED: '취소',
+} as const;
+
+export const ROLE_LABELS = {
+  ADMIN: '관리자',
+  MANAGER: '매니저',
+  USER: '사용자',
+  VIEWER: '조회자',
+} as const;
+```
+
+### 10. 파일 업로드
+- 지원 확장자: pdf, xlsx, xls, doc, docx, hwp, dwg, dxf, jpg, jpeg, png, gif
+- 최대 파일 크기: 100MB
+- Supabase Storage의 프로젝트별 버킷 구조: `projects/{projectId}/stage-{stageNumber}/`
+
+### 11. 설계 문서 참조
+개발 시 반드시 `docs/` 폴더의 설계 문서를 참조:
+- `01_PRD.md` — 제품 요구사항 정의서 (기능 명세)
+- `02_IA.md` — 정보 구조도 (사이트맵, 네비게이션)
+- `03_USECASE.md` — 유즈케이스 (업무 흐름)
+- `04_DESIGN_GUIDE.md` — 디자인 가이드 (컬러, 타이포, 컴포넌트)
+- `05_DB_SCHEMA.md` — DB 스키마 (Prisma 모델)
+- `06_API_DESIGN.md` — API 설계 (엔드포인트, 요청/응답)
+- `07_PROJECT_STRUCTURE.md` — 폴더 구조
+
+### 12. Supabase 데이터 ID 접두사 규칙
+- Supabase SQL Editor/Table Editor에서 수동으로 ID를 생성할 때는 반드시 `plusPMS` 접두사 사용
+- 권장 형식: `plusPMS_<entity>_<uniqueValue>`
+- 예시: `plusPMS_project_0001`, `plusPMS_customer_SEC_001`
+- 본 규칙은 프로젝트 전역 데이터 관리 지침으로 항상 우선 적용
