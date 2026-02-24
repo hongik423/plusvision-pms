@@ -55,7 +55,8 @@ function hasInvalidDatabaseUrl() {
 }
 
 function getDevFallbackAccount(email: string, password: string) {
-  if (process.env.NODE_ENV === "production") {
+  const demoLoginEnabled = process.env.DEMO_LOGIN_ENABLED !== "false";
+  if (!demoLoginEnabled) {
     return null;
   }
 
