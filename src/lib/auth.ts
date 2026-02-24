@@ -89,9 +89,6 @@ export const authOptions: NextAuthOptions = {
         if (!credentials?.loginId || !credentials.password) {
           return null;
         }
-        if (hasInvalidDatabaseUrl()) {
-          throw new Error("CONFIG_DATABASE_URL_INVALID");
-        }
 
         const normalizedLoginId = credentials.loginId.trim().toLowerCase();
         const loginIdAliasMap: Record<string, string> = {
@@ -101,6 +98,9 @@ export const authOptions: NextAuthOptions = {
         };
         const emailForLookup = loginIdAliasMap[normalizedLoginId] ?? normalizedLoginId;
         const fallbackAccount = getDevFallbackAccount(emailForLookup, credentials.password);
+        if (hasInvalidDatabaseUrl()) {
+          return fallbackAccount;
+        }
 
         try {
           const user = await prisma.user.findUnique({
