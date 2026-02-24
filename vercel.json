@@ -1,8 +1,8 @@
 {
-  "buildCommand": "cd src && npm run build",
-  "outputDirectory": "src/.next",
-  "installCommand": "cd src && npm install",
-  "devCommand": "cd src && npm run dev",
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "installCommand": "npm install",
+  "devCommand": "npm run dev",
   "framework": "nextjs",
   "regions": ["icn1"]
 }
