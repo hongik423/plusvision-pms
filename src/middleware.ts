@@ -1,27 +1,23 @@
-import { withAuth } from "next-auth/middleware";
-import { NextResponse } from "next/server";
+import { getToken } from "next-auth/jwt";
+import { NextResponse, type NextRequest } from "next/server";
 
-export default withAuth(
-  function middleware(req) {
-    const token = req.nextauth.token;
-    const { pathname } = req.nextUrl;
+export async function middleware(req: NextRequest) {
+  const secret = process.env.NEXTAUTH_SECRET ?? "pluspms-dev-secret-only";
+  const token = await getToken({ req, secret });
 
-    // /admin/** 경로는 ADMIN 역할만 접근 허용
-    if (pathname.startsWith("/admin") && token?.role !== "ADMIN") {
-      return NextResponse.redirect(new URL("/dashboard?error=forbidden", req.url));
-    }
+  if (!token) {
+    const loginUrl = new URL("/login", req.url);
+    loginUrl.searchParams.set("callbackUrl", req.nextUrl.pathname);
+    return NextResponse.redirect(loginUrl);
+  }
 
-    return NextResponse.next();
-  },
-  {
-    pages: {
-      signIn: "/login",
-    },
-    callbacks: {
-      authorized: ({ token }) => !!token,
-    },
-  },
-);
+  // /admin/** 경로는 ADMIN 역할만 접근 허용
+  if (req.nextUrl.pathname.startsWith("/admin") && token.role !== "ADMIN") {
+    return NextResponse.redirect(new URL("/dashboard?error=forbidden", req.url));
+  }
+
+  return NextResponse.next();
+}
 
 export const config = {
   matcher: [
