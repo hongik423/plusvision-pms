@@ -2,10 +2,8 @@
 
 import { FormEvent, useState } from "react";
 import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -29,8 +27,7 @@ export default function LoginPage() {
       }
       return;
     }
-    router.push("/dashboard");
-    router.refresh();
+    window.location.href = "/dashboard";
   }
 
   return (
