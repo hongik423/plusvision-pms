@@ -60,6 +60,9 @@ export default function LoginPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="비밀번호 입력"
+            autoComplete="off"
+            data-lpignore="true"
+            data-form-type="other"
             required
           />
         </div>
