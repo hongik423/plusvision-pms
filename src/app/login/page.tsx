@@ -27,7 +27,9 @@ export default function LoginPage() {
       }
       return;
     }
-    window.location.href = "/dashboard";
+    const params = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+    const callbackUrl = params.get("callbackUrl") ?? "/dashboard";
+    window.location.href = result?.url ?? callbackUrl;
   }
 
   return (

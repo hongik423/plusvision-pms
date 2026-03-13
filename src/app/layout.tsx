@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { ToastContainer } from "@/components/ui/toast";
+import { AuthSessionProvider } from "@/components/providers/session-provider";
 
 export const metadata: Metadata = {
   title: "PlusPMS",
@@ -24,8 +25,10 @@ export default function RootLayout({
         />
       </head>
       <body>
-        {children}
-        <ToastContainer />
+        <AuthSessionProvider>
+          {children}
+          <ToastContainer />
+        </AuthSessionProvider>
       </body>
     </html>
   );

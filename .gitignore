@@ -5,6 +5,7 @@ src/.next/
 .next/
 dist/
 build/
+*.tsbuildinfo
 
 # Logs
 *.log
