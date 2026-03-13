@@ -33,28 +33,48 @@ export default async function ProjectsPage({
   const order = (readParam(searchParams, "order") ?? "desc") as "asc" | "desc";
   const assigneeId = readParam(searchParams, "assigneeId") ?? undefined;
 
-  const [{ rows, total }, customers, sites, processTypes, itemTypes, users] = await Promise.all([
-    listProjects({
-      page: Number.isFinite(page) && page > 0 ? page : 1,
-      limit: Number.isFinite(limit) && limit > 0 ? limit : 20,
-      q,
-      status,
-      customerId,
-      siteId,
-      processTypeId,
-      itemTypeId,
-      assigneeId,
-      sort,
-      order,
-      role,
-      userId,
-    }),
-    prisma.customer.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
-    prisma.site.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
-    prisma.processType.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
-    prisma.itemType.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
-    prisma.user.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
-  ]);
+  let rows: Awaited<ReturnType<typeof listProjects>>["rows"] = [];
+  let total = 0;
+  let customers: { id: string; name: string }[] = [];
+  let sites: { id: string; name: string }[] = [];
+  let processTypes: { id: string; name: string }[] = [];
+  let itemTypes: { id: string; name: string }[] = [];
+  let users: { id: string; name: string }[] = [];
+  let dataError = "";
+
+  try {
+    const [listResult, c, s, pt, it, u] = await Promise.all([
+      listProjects({
+        page: Number.isFinite(page) && page > 0 ? page : 1,
+        limit: Number.isFinite(limit) && limit > 0 ? limit : 20,
+        q,
+        status,
+        customerId,
+        siteId,
+        processTypeId,
+        itemTypeId,
+        assigneeId,
+        sort,
+        order,
+        role,
+        userId,
+      }),
+      prisma.customer.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+      prisma.site.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+      prisma.processType.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+      prisma.itemType.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+      prisma.user.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    ]);
+    rows = listResult.rows;
+    total = listResult.total;
+    customers = c;
+    sites = s;
+    processTypes = pt;
+    itemTypes = it;
+    users = u;
+  } catch {
+    dataError = "데이터베이스 연결이 일시적으로 불안정합니다. DATABASE_URL을 확인하고 잠시 후 다시 시도해 주세요.";
+  }
 
   const totalPages = Math.max(1, Math.ceil(total / limit));
   const queryObject = {

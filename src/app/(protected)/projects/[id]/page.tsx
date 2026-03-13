@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { getServerSession } from "next-auth";
+import type { Session } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getProjectById } from "@/services/project-service";
 import { prisma } from "@/lib/prisma";
@@ -9,15 +10,31 @@ import type { Route } from "next";
 import Link from "next/link";
 
 export default async function ProjectDetailPage({ params }: { params: { id: string } }) {
-  const [project, session, users] = await Promise.all([
-    getProjectById(params.id),
-    getServerSession(authOptions),
-    prisma.user.findMany({
-      where: { isActive: true },
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    }),
-  ]);
+  let project: Awaited<ReturnType<typeof getProjectById>> = null;
+  let session: Session | null = null;
+  let users: { id: string; name: string }[] = [];
+
+  try {
+    [project, session, users] = await Promise.all([
+      getProjectById(params.id),
+      getServerSession(authOptions),
+      prisma.user.findMany({
+        where: { isActive: true },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      }),
+    ]);
+  } catch {
+    return (
+      <section className="rounded-xl border bg-white p-8 text-center">
+        <p className="text-4xl mb-4">⚠️</p>
+        <h2 className="text-xl font-bold text-slate-800">데이터를 불러올 수 없습니다</h2>
+        <p className="mt-3 text-sm text-slate-500">
+          데이터베이스 연결이 일시적으로 불안정합니다. 잠시 후 다시 시도해 주세요.
+        </p>
+      </section>
+    );
+  }
 
   if (!project) notFound();
 
