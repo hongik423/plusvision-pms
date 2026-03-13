@@ -12,6 +12,7 @@ type NavItem = { href: string; label: string; adminOnly?: boolean };
 const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "대시보드" },
   { href: "/projects", label: "프로젝트" },
+  { href: "/drive", label: "자료실" },
   { href: "/search", label: "검색" },
   { href: "/admin/master", label: "관리", adminOnly: true },
   { href: "/admin/migration", label: "마이그레이션", adminOnly: true },

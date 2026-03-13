@@ -6,12 +6,24 @@ import { listProjects } from "@/services/project-service";
 import { prisma } from "@/lib/prisma";
 import { PROJECT_STATUS_LABELS, PROJECT_STATUS_COLORS } from "@/lib/constants";
 import { requireSession } from "@/lib/rbac";
+import ProjectSearchInput from "@/components/projects/project-search-input";
+
+// 서버사이드 캐싱 비활성화 — DB 변경 즉시 반영
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const SORT_OPTIONS = [
   { value: "createdAt", label: "등록일" },
   { value: "name", label: "프로젝트명" },
   { value: "dueDate", label: "완료예정일" },
   { value: "status", label: "상태" },
+] as const;
+
+const LIMIT_OPTIONS = [
+  { value: "20", label: "20건" },
+  { value: "50", label: "50건" },
+  { value: "100", label: "100건" },
+  { value: "500", label: "전체 (500건)" },
 ] as const;
 
 export default async function ProjectsPage({
@@ -142,13 +154,13 @@ export default async function ProjectsPage({
       </div>
 
       <form className="grid gap-3 rounded-xl border bg-white p-4 md:grid-cols-4" method="GET">
-        <label className="text-sm md:col-span-2">
+        <div className="text-sm md:col-span-2">
           <span className="mb-1 flex items-center gap-1.5 font-semibold">
             <Search className="h-4 w-4 text-slate-500" />
             검색어
           </span>
-          <input className="h-11 w-full rounded border px-3" name="q" defaultValue={q ?? ""} placeholder="프로젝트명/번호" />
-        </label>
+          <ProjectSearchInput defaultValue={q ?? ""} inputName="q" />
+        </div>
         <label className="text-sm">
           <span className="mb-1 block font-semibold">상태</span>
           <select className="h-11 w-full rounded border px-3" name="status" defaultValue={status ?? ""}>
@@ -238,7 +250,15 @@ export default async function ProjectsPage({
             <option value="asc">오름차순</option>
           </select>
         </label>
-        <input type="hidden" name="limit" value={String(limit)} />
+        <label className="text-sm">
+          <span className="mb-1 block font-semibold">표시 개수</span>
+          <select className="h-11 w-full rounded border px-3" name="limit" defaultValue={String(limit)}>
+            <option value="20">20건</option>
+            <option value="50">50건</option>
+            <option value="100">100건</option>
+            <option value="500">전체 (500건)</option>
+          </select>
+        </label>
         <div className="flex items-end gap-2 md:col-span-4">
           <button type="submit" className="flex items-center gap-2 h-11 rounded bg-blue-600 px-5 font-semibold text-white hover:bg-blue-700 transition-colors">
             <Search className="h-4 w-4" />

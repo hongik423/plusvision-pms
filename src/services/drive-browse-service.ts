@@ -43,6 +43,8 @@ export interface DriveBrowseItem {
   name: string;
   mimeType: string;
   size?: number;
+  modifiedTime?: string;
+  webViewLink?: string;
   isFolder: boolean;
   /** 폴더인 경우 추론된 PMS 단계 */
   inferredStage?: { stageNumber: number; documentType: string };
@@ -77,6 +79,8 @@ function toItem(f: DriveFileDescriptor): DriveBrowseItem {
     name: f.name,
     mimeType: f.mimeType,
     size: f.size,
+    modifiedTime: f.modifiedTime,
+    webViewLink: f.webViewLink,
     isFolder,
     ...(isFolder ? { inferredStage: inferStageFromFolderName(f.name) } : {}),
   };

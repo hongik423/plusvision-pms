@@ -9,6 +9,8 @@
     "kill-port": "npx kill-port 3001",
     "dev": "npm --prefix src run dev",
     "dev:clean": "npm run clean && npm run dev",
+    "dev:turbo": "npm --prefix src run dev:turbo",
+    "dev:prod": "npm run build && npm run start",
     "build": "npm --prefix src run build",
     "start": "npm --prefix src run start",
     "lint": "npm --prefix src run lint",

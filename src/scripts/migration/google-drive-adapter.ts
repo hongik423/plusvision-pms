@@ -10,6 +10,8 @@ export type DriveFileDescriptor = {
   name: string;
   mimeType: string;
   size?: number;
+  modifiedTime?: string;
+  webViewLink?: string;
   /** 폴더 내 경로 (재귀 탐색 시 설정) */
   relativePath?: string;
 };
@@ -99,7 +101,7 @@ async function apiKeyListPage(
   pageToken?: string,
 ): Promise<{ files: DriveFileDescriptor[]; nextPageToken?: string }> {
   const query = encodeURIComponent(`'${folderId}' in parents and trashed=false`);
-  const fields = encodeURIComponent("nextPageToken,files(id,name,mimeType,size)");
+  const fields = encodeURIComponent("nextPageToken,files(id,name,mimeType,size,modifiedTime,webViewLink)");
   let url = `https://www.googleapis.com/drive/v3/files?q=${query}&fields=${fields}&pageSize=1000&key=${apiKey}`;
   if (pageToken) url += `&pageToken=${encodeURIComponent(pageToken)}`;
 
@@ -111,7 +113,7 @@ async function apiKeyListPage(
 
   const payload = (await res.json()) as {
     nextPageToken?: string;
-    files?: Array<{ id: string; name: string; mimeType: string; size?: string }>;
+    files?: Array<{ id: string; name: string; mimeType: string; size?: string; modifiedTime?: string; webViewLink?: string }>;
   };
 
   return {
@@ -120,6 +122,8 @@ async function apiKeyListPage(
       name: f.name,
       mimeType: f.mimeType,
       size: f.size ? Number(f.size) : undefined,
+      modifiedTime: f.modifiedTime,
+      webViewLink: f.webViewLink,
     })),
     nextPageToken: payload.nextPageToken,
   };
@@ -186,7 +190,7 @@ async function driveListPage(
   pageToken?: string,
 ): Promise<{ files: DriveFileDescriptor[]; nextPageToken?: string }> {
   const query = encodeURIComponent(`'${folderId}' in parents and trashed=false`);
-  const fields = encodeURIComponent("nextPageToken,files(id,name,mimeType,size)");
+  const fields = encodeURIComponent("nextPageToken,files(id,name,mimeType,size,modifiedTime,webViewLink)");
   let url = `https://www.googleapis.com/drive/v3/files?q=${query}&fields=${fields}&pageSize=1000`;
   if (pageToken) url += `&pageToken=${encodeURIComponent(pageToken)}`;
 
@@ -198,7 +202,7 @@ async function driveListPage(
 
   const payload = (await res.json()) as {
     nextPageToken?: string;
-    files?: Array<{ id: string; name: string; mimeType: string; size?: string }>;
+    files?: Array<{ id: string; name: string; mimeType: string; size?: string; modifiedTime?: string; webViewLink?: string }>;
   };
 
   return {
@@ -207,6 +211,8 @@ async function driveListPage(
       name: f.name,
       mimeType: f.mimeType,
       size: f.size ? Number(f.size) : undefined,
+      modifiedTime: f.modifiedTime,
+      webViewLink: f.webViewLink,
     })),
     nextPageToken: payload.nextPageToken,
   };

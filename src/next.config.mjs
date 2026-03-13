@@ -3,9 +3,15 @@ const nextConfig = {
   experimental: {
     typedRoutes: true,
   },
-  webpack: (config) => {
-    // @next/swc 플랫폼별 optional deps 경고 억제 (실제 빌드에는 영향 없음)
+  webpack: (config, { dev }) => {
+    // 인프라 로그 레벨 제한
     config.infrastructureLogging = { level: 'error' };
+
+    // Next.js 14.2.x SWC hashSalt 충돌 방지: 개발 모드에서 캐시 비활성화
+    if (dev) {
+      config.cache = false;
+    }
+
     return config;
   },
 };

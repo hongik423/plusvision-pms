@@ -11,8 +11,8 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url);
-  // [N12 수정] 페이지네이션 상한 적용 (최대 100건)
-  const MAX_PAGE_SIZE = 100;
+  // [N12 수정] 페이지네이션 상한 적용 (최대 500건 - 전건 조회 지원)
+  const MAX_PAGE_SIZE = 500;
   const page = Math.max(1, Number(url.searchParams.get("page") ?? "1") || 1);
   const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(url.searchParams.get("limit") ?? "20") || 20));
   const q = url.searchParams.get("q") ?? undefined;
