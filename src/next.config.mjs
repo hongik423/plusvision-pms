@@ -1,7 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  staticPageGenerationTimeout: 120,
   experimental: {
-    typedRoutes: true,
+    // typedRoutes: Next.js 14.2에서 .next/types 생성 시 next/server.js 모듈 오류로 비활성화
+    // typedRoutes: true,
   },
   webpack: (config, { dev }) => {
     // 인프라 로그 레벨 제한

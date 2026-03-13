@@ -22,7 +22,7 @@ const MANUAL_TYPE_LABELS: Record<ManualRow["type"], string> = {
 
 export default function ProjectManualsPage() {
   const params = useParams<{ id: string }>();
-  const projectId = params.id;
+  const projectId = params!.id;
 
   const [rows, setRows] = useState<ManualRow[]>([]);
   const [loading, setLoading] = useState(false);

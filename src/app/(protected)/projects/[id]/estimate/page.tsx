@@ -61,7 +61,7 @@ const EMPTY_ITEM: DraftItem = {
 
 export default function ProjectEstimatePage() {
   const params = useParams<{ id: string }>();
-  const projectId = params.id;
+  const projectId = params!.id;
 
   const [partSpecs, setPartSpecs] = useState<PartSpec[]>([]);
   const [estimates, setEstimates] = useState<EstimateRow[]>([]);

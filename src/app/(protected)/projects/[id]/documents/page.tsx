@@ -51,7 +51,7 @@ function isImage(mimeType: string) {
 
 export default function ProjectDocumentsPage() {
   const params = useParams<{ id: string }>();
-  const projectId = params.id;
+  const projectId = params?.id ?? "";
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [rows, setRows] = useState<DocumentRow[]>([]);

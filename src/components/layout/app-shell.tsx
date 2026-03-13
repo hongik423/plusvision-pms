@@ -21,7 +21,7 @@ const NAV_ITEMS: NavItem[] = [
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { data } = useSession();
-  const pathname = usePathname();
+  const pathname = usePathname() ?? "";
   const role = data?.user?.role ?? "VIEWER";
   const isAdmin = role === "ADMIN";
   const [mobileOpen, setMobileOpen] = useState(false);
