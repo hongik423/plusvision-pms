@@ -1,7 +1,8 @@
 import { PDFDocument, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import { readFileSync } from "fs";
-import { join } from "path";
+import { dirname, join, resolve } from "path";
+import { fileURLToPath } from "url";
 import { fail } from "@/lib/api-response";
 import { requireApiRole } from "@/lib/api-auth";
 import { getEstimateById } from "@/services/estimate-service";
@@ -38,7 +39,9 @@ export async function GET(_request: Request, { params }: { params: { estId: stri
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
 
-  const fontPath = join(process.cwd(), "public", "fonts", "NotoSansKR-Regular.ttf");
+  // cwd 기준 아님, 소스 기준 경로 (Vercel 배포 시 process.cwd()가 프로젝트 루트)
+  const __filename = fileURLToPath(import.meta.url);
+  const fontPath = resolve(dirname(__filename), "../../../../../../public/fonts/NotoSansKR-Regular.ttf");
   const fontBytes = readFileSync(fontPath);
   const font = await pdf.embedFont(fontBytes);
 
