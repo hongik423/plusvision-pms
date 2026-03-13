@@ -110,3 +110,119 @@ export const DEFAULT_PAGE_SIZE = 20;
 
 /** 총 단계 수 */
 export const TOTAL_STAGES = 10;
+
+// ============================================
+// Stage-Gate + Lean 하이브리드 방법론
+// ============================================
+
+/**
+ * 3-Phase 구조 (Stage-Gate + Lean 하이브리드)
+ * Phase 1: 기획 (Stage 1~4) — Stage-Gate 방식, 각 게이트에서 산출물 검증
+ * Phase 2: 계약+실행 (Stage 5~8) — Lean 칸반 방식, 일일 작업 관리
+ * Phase 3: 마감 (Stage 9~10) — UUID 전 과정 추적 아카이빙
+ */
+export type Phase = "PLANNING" | "EXECUTION" | "CLOSING";
+
+export const PHASE_CONFIG: Record<Phase, {
+  label: string;
+  description: string;
+  stages: number[];
+  methodology: "STAGE_GATE" | "LEAN_KANBAN" | "ARCHIVE";
+  color: string;
+}> = {
+  PLANNING: {
+    label: "기획",
+    description: "의뢰접수 → 담당자배정 → 고객협의 → GO/NO-GO 결정",
+    stages: [1, 2, 3, 4],
+    methodology: "STAGE_GATE",
+    color: "bg-blue-500",
+  },
+  EXECUTION: {
+    label: "계약+실행",
+    description: "채권등록 → 견적작성 → 제작 → 납품/설치",
+    stages: [5, 6, 7, 8],
+    methodology: "LEAN_KANBAN",
+    color: "bg-green-500",
+  },
+  CLOSING: {
+    label: "마감",
+    description: "실적입력 → 최종문서정리 (UUID 전 과정 추적 아카이빙)",
+    stages: [9, 10],
+    methodology: "ARCHIVE",
+    color: "bg-purple-500",
+  },
+};
+
+/** 단계 번호로 Phase 조회 */
+export function getPhaseByStage(stageNumber: number): Phase {
+  if (stageNumber >= 1 && stageNumber <= 4) return "PLANNING";
+  if (stageNumber >= 5 && stageNumber <= 8) return "EXECUTION";
+  return "CLOSING";
+}
+
+/**
+ * 게이트 검증 조건 — Phase 전환 시 충족해야 하는 조건
+ * Gate 1: Phase 1→2 전환 (4단계 완료 시) — GO/NO-GO 결정
+ * Gate 2: Phase 2→3 전환 (8단계 완료 시) — 납품/설치 완료
+ */
+export const GATE_REQUIREMENTS: Record<number, {
+  gateId: string;
+  gateName: string;
+  description: string;
+  requiredDocTypes: string[];
+  requiredFields: string[];
+}> = {
+  4: {
+    gateId: "GATE_1",
+    gateName: "GO/NO-GO 게이트",
+    description: "프로젝트 진행 여부 결정. 고객 협의 완료 및 의사결정 근거 확인.",
+    requiredDocTypes: [],
+    requiredFields: ["status_decision"],
+  },
+  8: {
+    gateId: "GATE_2",
+    gateName: "납품 완료 게이트",
+    description: "납품/설치 완료 확인. 고객 확인서 필요.",
+    requiredDocTypes: ["INSTALL_MANUAL"],
+    requiredFields: ["delivery_confirmed"],
+  },
+};
+
+/**
+ * Lean 칸반 보드 상태 정의 (Phase 2 전용)
+ */
+export type KanbanStatus = "BACKLOG" | "IN_PROGRESS" | "REVIEW" | "DONE";
+
+export const KANBAN_COLUMNS: { status: KanbanStatus; label: string; color: string }[] = [
+  { status: "BACKLOG", label: "대기", color: "bg-gray-200" },
+  { status: "IN_PROGRESS", label: "진행중", color: "bg-blue-200" },
+  { status: "REVIEW", label: "검토", color: "bg-yellow-200" },
+  { status: "DONE", label: "완료", color: "bg-green-200" },
+];
+
+/**
+ * Google Drive 폴더 구조 매핑 (표준화)
+ *
+ * 실제 Drive 구조:
+ *   공유 문서함 > 플러스비전 공용
+ *     ├── 개인별/     ← 직원 개인 작업 폴더
+ *     └── 프로젝트/   ← 프로젝트 그룹별 폴더 (삼성, IMK 등)
+ *
+ * 세부 설정은 src/lib/drive-config.ts 참고
+ */
+export const DRIVE_FOLDER_STRUCTURE: Record<number, {
+  folderName: string;
+  driveMapping: string;
+  driveKeywords: string[];
+}> = {
+  1:  { folderName: "01_의뢰접수",   driveMapping: "접수서류",              driveKeywords: ["접수", "의뢰", "request"] },
+  2:  { folderName: "02_담당자지정", driveMapping: "조직도",               driveKeywords: ["담당", "연락처", "조직"] },
+  3:  { folderName: "03_고객협의",   driveMapping: "현장사진_회의록",      driveKeywords: ["현장", "사진", "협의", "회의", "공사", "환경", "안전"] },
+  4:  { folderName: "04_진행결정",   driveMapping: "의사결정기록",          driveKeywords: ["결정", "홀드", "보류", "hold"] },
+  5:  { folderName: "05_채권등록",   driveMapping: "채권서류",              driveKeywords: ["채권", "계약", "bond"] },
+  6:  { folderName: "06_견적작성",   driveMapping: "견적서",               driveKeywords: ["견적", "적산", "estimate"] },
+  7:  { folderName: "07_제작",       driveMapping: "제작매뉴얼_부품리스트_도면", driveKeywords: ["제작", "도면", "부품", "drawing"] },
+  8:  { folderName: "08_납품설치",   driveMapping: "설치매뉴얼_납품확인서", driveKeywords: ["설치", "납품", "install"] },
+  9:  { folderName: "09_실적입력",   driveMapping: "실적데이터",            driveKeywords: ["실적", "성과", "result"] },
+  10: { folderName: "10_최종문서",   driveMapping: "전체아카이브",          driveKeywords: ["최종", "아카이브", "정리", "old"] },
+};

@@ -79,14 +79,25 @@ export function MasterCrudPanel() {
     manufacturer: "",
   });
 
+  async function safeFetchJson<T>(url: string): Promise<{ success: boolean; data?: T }> {
+    const res = await fetch(url);
+    const text = await res.text();
+    if (!text) return { success: false, data: undefined };
+    try {
+      return JSON.parse(text) as { success: boolean; data?: T };
+    } catch {
+      return { success: false, data: undefined };
+    }
+  }
+
   async function fetchMasterData() {
     setLoading(true);
     const [sites, processTypes, itemTypes, customers, partSpecs] = await Promise.all([
-      fetch("/api/v1/master/sites").then((response) => response.json()),
-      fetch("/api/v1/master/process-types").then((response) => response.json()),
-      fetch("/api/v1/master/item-types").then((response) => response.json()),
-      fetch("/api/v1/master/customers").then((response) => response.json()),
-      fetch("/api/v1/master/part-specs").then((response) => response.json()),
+      safeFetchJson<Site[]>("/api/v1/master/sites"),
+      safeFetchJson<ProcessType[]>("/api/v1/master/process-types"),
+      safeFetchJson<ItemType[]>("/api/v1/master/item-types"),
+      safeFetchJson<Customer[]>("/api/v1/master/customers"),
+      safeFetchJson<PartSpec[]>("/api/v1/master/part-specs"),
     ]);
 
     setData({
@@ -114,6 +125,16 @@ export function MasterCrudPanel() {
     [data],
   );
 
+  async function parseResponseJson(res: Response): Promise<{ success?: boolean; error?: { message?: string } } | null> {
+    const text = await res.text();
+    if (!text) return null;
+    try {
+      return JSON.parse(text) as { success?: boolean; error?: { message?: string } };
+    } catch {
+      return null;
+    }
+  }
+
   async function createRecord(endpoint: string, body: Record<string, unknown>) {
     setSaving(true);
     const response = await fetch(endpoint, {
@@ -121,10 +142,10 @@ export function MasterCrudPanel() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    const payload = await response.json();
+    const payload = await parseResponseJson(response);
     setSaving(false);
-    if (!payload.success) {
-      alert(payload.error?.message ?? "생성에 실패했습니다.");
+    if (!payload?.success) {
+      alert(payload?.error?.message ?? "생성에 실패했습니다.");
       return false;
     }
     await fetchMasterData();
@@ -138,10 +159,10 @@ export function MasterCrudPanel() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    const payload = await response.json();
+    const payload = await parseResponseJson(response);
     setSaving(false);
-    if (!payload.success) {
-      alert(payload.error?.message ?? "수정에 실패했습니다.");
+    if (!payload?.success) {
+      alert(payload?.error?.message ?? "수정에 실패했습니다.");
       return false;
     }
     await fetchMasterData();

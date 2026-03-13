@@ -34,12 +34,20 @@ export function ProjectDetailClient({
   const router = useRouter();
   const [stages, setStages] = useState(initialStages);
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
   const refresh = useCallback(async () => {
-    // Server Component 페이지를 새로고침해서 최신 데이터 반영
-    router.refresh();
-    // 클라이언트 측 stages도 서버에서 최신 데이터 fetch
+    if (isRefreshing) return; // 중복 요청 방지
+    setIsRefreshing(true);
+
     try {
+      // [수정] 먼저 클라이언트 API로 최신 데이터 fetch 후 Server Component 새로고침
       const res = await fetch(`/api/v1/projects/${projectId}/stages`);
+      if (!res.ok) {
+        console.error("[ProjectDetail] 스테이지 조회 실패:", res.status);
+        router.refresh();
+        return;
+      }
       const payload = await res.json();
       if (payload.success && Array.isArray(payload.data)) {
         setStages(
@@ -66,10 +74,15 @@ export function ProjectDetailClient({
           })),
         );
       }
+      // API 호출 성공 후 Server Component도 새로고침
+      router.refresh();
     } catch {
-      // 실패 시 router.refresh()로 폴백
+      // 네트워크 오류 시 Server Component 새로고침으로 폴백
+      router.refresh();
+    } finally {
+      setIsRefreshing(false);
     }
-  }, [projectId, router]);
+  }, [projectId, router, isRefreshing]);
 
   return (
     <div className="space-y-3">

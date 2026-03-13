@@ -2,7 +2,8 @@
 // 실행: npx prisma migrate dev --name init
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -20,17 +21,20 @@ enum Role {
 }
 
 model User {
-  id            String    @id @default(dbgenerated("('plusPMS_'::text || replace(gen_random_uuid()::text, '-'::text, ''::text))"))
-  email         String    @unique
-  name          String
-  password      String?
-  role          Role      @default(USER)
-  department    String?
-  phone         String?
-  profileImage  String?
-  isActive      Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id              String    @id @default(dbgenerated("('plusPMS_'::text || replace(gen_random_uuid()::text, '-'::text, ''::text))"))
+  email           String    @unique
+  name            String
+  password        String?
+  role            Role      @default(USER)
+  department      String?
+  phone           String?
+  profileImage    String?
+  isActive        Boolean   @default(true)
+  // Google Drive 개인 폴더 연동
+  driveFolderId   String?   // 개인별 폴더 ID (예: 1NyFdEfenaIzmVKKNDUa8e88Wqmp2QMJF)
+  driveFolderName String?   // 개인별 폴더명 (예: 김남용)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   accounts        Account[]
   projectMembers  ProjectMember[]
@@ -41,6 +45,7 @@ model User {
   uploadedDocs    StageDocument[]
   createdEstimates Estimate[]
   createdManuals  Manual[]
+  driveLinks      ProjectDriveLink[]
 
   @@map("users")
 }
@@ -109,6 +114,7 @@ model Project {
   manuals       Manual[]
   auditLogs     AuditLog[]
   notifications Notification[]
+  driveLinks    ProjectDriveLink[]
 
   @@index([status])
   @@index([customerId])
@@ -385,6 +391,66 @@ model Notification {
   @@index([projectId])
   @@index([createdAt])
   @@map("notifications")
+}
+
+// ===== Google Drive 연동 =====
+
+// 프로젝트(또는 특정 단계)에 연결된 Google Drive 폴더 링크
+// - stageNumber = null  → 프로젝트 전체 공용 폴더
+// - stageNumber = 1~10 → 해당 단계 전용 폴더
+model ProjectDriveLink {
+  id            String    @id @default(dbgenerated("('plusPMS_'::text || replace(gen_random_uuid()::text, '-'::text, ''::text))"))
+  projectId     String
+  driveFolderId String
+  folderName    String?
+  stageNumber   Int?
+  isActive      Boolean   @default(true)
+  /// Drive Watch 채널 ID (webhook 등록 시 설정)
+  channelId     String?
+  /// Drive Watch 채널 토큰 (webhook 서명 검증용)
+  channelToken  String?
+  /// Drive Watch 채널 만료 시각
+  channelExpiry DateTime?
+  lastSyncAt    DateTime?
+  createdById   String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  project   Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User           @relation(fields: [createdById], references: [id])
+  syncLogs  DriveSyncLog[]
+
+  @@unique([projectId, driveFolderId])
+  @@index([projectId])
+  @@index([channelId])
+  @@map("project_drive_links")
+}
+
+// Drive 동기화 실행 로그
+// 어떤 파일이 어느 시점에 동기화(또는 건너뜀/실패)됐는지 추적
+model DriveSyncLog {
+  id           String   @id @default(dbgenerated("('plusPMS_'::text || replace(gen_random_uuid()::text, '-'::text, ''::text))"))
+  driveLinkId  String
+  projectId    String
+  driveFileId  String
+  fileName     String
+  stageNumber  Int
+  documentType String
+  /// SYNCED | SKIPPED | FAILED
+  status       String
+  /// 동기화 성공 시 생성된 StageDocument ID
+  documentId   String?
+  /// 실패/건너뜀 사유
+  reason       String?
+  syncedAt     DateTime @default(now())
+
+  driveLink ProjectDriveLink @relation(fields: [driveLinkId], references: [id], onDelete: Cascade)
+
+  @@index([driveLinkId])
+  @@index([projectId])
+  @@index([driveFileId])
+  @@index([status])
+  @@map("drive_sync_logs")
 }
 
 // ===== 감사 로그 =====

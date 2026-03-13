@@ -1,8 +1,14 @@
 {
   "name": "plusvision-pms-root",
   "private": true,
+  "prisma": {
+    "schema": "src/prisma/schema.prisma"
+  },
   "scripts": {
+    "clean": "node -e \"try{require('fs').rmSync('src/.next',{recursive:true,force:1})}catch(e){}\"",
+    "kill-port": "npx kill-port 3001",
     "dev": "npm --prefix src run dev",
+    "dev:clean": "npm run clean && npm run dev",
     "build": "npm --prefix src run build",
     "start": "npm --prefix src run start",
     "lint": "npm --prefix src run lint",
@@ -13,7 +19,10 @@
     "db:migrate": "npm --prefix src run db:migrate",
     "db:seed": "npm --prefix src run db:seed",
     "db:studio": "npm --prefix src run db:studio",
+    "db:generate": "npm --prefix src run db:generate",
+    "db:oauth": "npm --prefix src run db:oauth",
     "migration:dry-run": "npm --prefix src run migration:dry-run",
-    "migration:verify": "npm --prefix src run migration:verify"
+    "migration:verify": "npm --prefix src run migration:verify",
+    "drive:link-personal": "npm --prefix src run drive:link-personal"
   }
 }

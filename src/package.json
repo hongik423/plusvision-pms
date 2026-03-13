@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 3001",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -11,15 +11,18 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "npm run lint && npm run type-check && npm run test && npm run build",
-    "db:push": "prisma db push",
-    "db:migrate": "prisma migrate dev",
+    "db:push": "prisma db push --schema prisma/schema.prisma",
+    "db:migrate": "prisma migrate dev --schema prisma/schema.prisma",
     "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio",
+    "db:generate": "npx prisma@5.20.0 generate --schema prisma/schema.prisma",
+    "db:oauth": "tsx scripts/migration/oauth-setup.ts",
+    "db:studio": "prisma studio --schema prisma/schema.prisma",
     "migration:dry-run": "tsx scripts/migration/dry-run.ts",
     "migration:gdrive-dry-run": "tsx scripts/migration/gdrive-dry-run.ts",
     "migration:gdrive-run": "tsx scripts/migration/gdrive-migrate.ts",
     "migration:verify": "tsx scripts/verification/verify-integrity.ts",
-    "postinstall": "prisma generate"
+    "drive:link-personal": "tsx scripts/migration/link-personal-drive-folders.ts",
+    "postinstall": "prisma generate --schema prisma/schema.prisma"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
@@ -34,6 +37,7 @@
     "@radix-ui/react-separator": "^1.1.0",
     "@radix-ui/react-tabs": "^1.1.0",
     "@radix-ui/react-tooltip": "^1.1.0",
+    "@rollup/rollup-linux-x64-gnu": "^4.59.0",
     "@supabase/supabase-js": "^2.45.0",
     "@types/nodemailer": "^7.0.11",
     "bcryptjs": "^2.4.3",
@@ -55,6 +59,9 @@
     "zod": "^3.23.0",
     "zustand": "^4.5.0"
   },
+  "prisma": {
+    "schema": "prisma/schema.prisma"
+  },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20.0.0",
@@ -64,7 +71,7 @@
     "eslint": "^8.0.0",
     "eslint-config-next": "14.2.0",
     "postcss": "^8.4.0",
-    "prisma": "^5.20.0",
+    "prisma": "5.20.0",
     "tailwindcss": "^3.4.0",
     "tsx": "^4.0.0",
     "typescript": "^5.5.0",

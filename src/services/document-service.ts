@@ -61,6 +61,15 @@ export async function uploadProjectDocument(input: {
   });
 }
 
+// ── [N06] 프로젝트별 총 저장 용량 조회 ──
+export async function getProjectStorageUsage(projectId: string): Promise<number> {
+  const result = await prisma.stageDocument.aggregate({
+    where: { stage: { projectId } },
+    _sum: { fileSize: true },
+  });
+  return result._sum.fileSize ?? 0;
+}
+
 export async function getDocumentById(docId: string) {
   return prisma.stageDocument.findUnique({
     where: { id: docId },

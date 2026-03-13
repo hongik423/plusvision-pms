@@ -11,8 +11,10 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url);
-  const page = Number(url.searchParams.get("page") ?? "1");
-  const limit = Number(url.searchParams.get("limit") ?? "20");
+  // [N12 수정] 페이지네이션 상한 적용 (최대 100건)
+  const MAX_PAGE_SIZE = 100;
+  const page = Math.max(1, Number(url.searchParams.get("page") ?? "1") || 1);
+  const limit = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(url.searchParams.get("limit") ?? "20") || 20));
   const q = url.searchParams.get("q") ?? undefined;
   const statusRaw = url.searchParams.get("status");
   const status = statusRaw ? (statusRaw as ProjectStatus) : undefined;
@@ -70,9 +72,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const project = await createProject({
-    ...parsed.data,
-    createdById: gate.session.user.id,
-  });
-  return ok(project, { status: 201 });
+  // [N10 수정] try/catch 에러 핸들링 추가
+  try {
+    const project = await createProject({
+      ...parsed.data,
+      createdById: gate.session.user.id,
+    });
+    return ok(project, { status: 201 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "프로젝트 생성 실패";
+    return fail({ code: "INTERNAL_ERROR", message }, 500);
+  }
 }

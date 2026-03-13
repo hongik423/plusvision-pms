@@ -39,6 +39,59 @@ export const createEstimateSchema = z.object({
     .min(1),
 });
 
+// ── [N01] 프로젝트 업데이트 스키마: 허용 필드 명시적 제한 ──
+export const updateProjectSchema = z.object({
+  name: z.string().min(1, "프로젝트명은 필수입니다.").optional(),
+  description: z.string().optional(),
+  dueDate: z.string().refine(
+    (v) => !v || !isNaN(new Date(v).getTime()),
+    { message: "유효하지 않은 날짜 형식입니다." }
+  ).optional(),
+  completedDate: z.string().refine(
+    (v) => !v || !isNaN(new Date(v).getTime()),
+    { message: "유효하지 않은 날짜 형식입니다." }
+  ).optional(),
+  status: z.enum(["PENDING", "ACTIVE", "COMPLETED", "HOLD", "CANCELLED"]).optional(),
+}).strict(); // strict: 정의되지 않은 필드 전달 시 에러
+
+// ── [N02] 견적서 업데이트 스키마: 허용 필드 명시적 제한 ──
+export const updateEstimateSchema = z.object({
+  title: z.string().min(1).optional(),
+  notes: z.string().optional(),
+  status: z.enum(["DRAFT", "SUBMITTED", "APPROVED"]).optional(),
+}).strict();
+
+// ── [N09] DocumentType 검증 스키마 ──
+export const documentTypeSchema = z.enum([
+  "PROPOSAL", "ESTIMATE", "MANUFACTURE_MANUAL", "INSTALL_MANUAL",
+  "PARTS_LIST", "SITE_PHOTO", "DRAWING", "MEETING_NOTE",
+  "EXPORT_RECORD", "OTHER",
+]);
+
+// ── [N07] stageNumber 검증 헬퍼 ──
+export function parseStageNumber(raw: string): { ok: true; value: number } | { ok: false; message: string } {
+  const num = Number(raw);
+  if (!Number.isInteger(num) || num < 1 || num > 10) {
+    return { ok: false, message: "유효하지 않은 단계 번호입니다. (1~10 정수)" };
+  }
+  return { ok: true, value: num };
+}
+
+// ── Drive 폴더 연결 스키마 ──
+export const linkDriveFolderSchema = z.object({
+  driveFolderId: z.string().min(1, "Drive 폴더 ID가 필요합니다."),
+  folderName:    z.string().optional(),
+  stageNumber:   z.number().int().min(1).max(10).optional(),
+  recursive:     z.boolean().optional().default(false),
+});
+
+// ── Drive 동기화 요청 스키마 ──
+export const driveSyncSchema = z.object({
+  linkId:      z.string().optional(),
+  recursive:   z.boolean().optional().default(false),
+  forceResync: z.boolean().optional().default(false),
+});
+
 export const createManualSchema = z.object({
   type: z.enum(["MANUFACTURE", "INSTALL"]),
   title: z.string().min(1, "제목은 필수입니다."),

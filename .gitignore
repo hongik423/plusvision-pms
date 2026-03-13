@@ -39,4 +39,12 @@ Thumbs.db
 # PDF 테스트 파일
 *.pdf
 
+# 아카이브 / 백업
+*.zip
+*.bak
+
+# 임시 / 내보내기
+src/check-project-temp.cjs
+플러스비젼 공용/
+
 .vercel

@@ -3,7 +3,12 @@ import { createHmac, timingSafeEqual } from "crypto";
 const TOKEN_TTL_MS = 60 * 60 * 1000; // 1시간
 
 function getSecret() {
-  return process.env.NEXTAUTH_SECRET ?? "pluspms-dev-secret-only";
+  const secret = process.env.NEXTAUTH_SECRET;
+  // [보안 수정] 프로덕션에서는 반드시 NEXTAUTH_SECRET이 설정되어 있어야 함
+  if (process.env.NODE_ENV === "production" && !secret) {
+    throw new Error("프로덕션 환경에서 NEXTAUTH_SECRET이 설정되지 않았습니다. 비밀번호 재설정 토큰을 생성할 수 없습니다.");
+  }
+  return secret ?? "pluspms-dev-secret-only";
 }
 
 /**

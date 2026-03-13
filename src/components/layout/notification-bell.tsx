@@ -20,8 +20,8 @@ export function NotificationBell() {
 
   useEffect(() => {
     void fetchCount();
-    // 30초마다 자동 갱신
-    const timer = setInterval(() => void fetchCount(), 30_000);
+    // 60초마다 자동 갱신 (DB 연결 제한 고려)
+    const timer = setInterval(() => void fetchCount(), 60_000);
     return () => clearInterval(timer);
   }, []);
 

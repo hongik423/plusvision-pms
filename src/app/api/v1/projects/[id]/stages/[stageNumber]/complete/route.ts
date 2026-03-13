@@ -1,6 +1,6 @@
 import { fail, ok } from "@/lib/api-response";
 import { requireProjectAccess } from "@/lib/api-auth";
-import { completeStageSchema } from "@/lib/validators";
+import { completeStageSchema, parseStageNumber } from "@/lib/validators";
 import { completeStage } from "@/services/stage-service";
 
 export async function POST(
@@ -12,6 +12,12 @@ export async function POST(
     return gate.response;
   }
 
+  // [N07 수정] stageNumber 정수 검증 (NaN 방지)
+  const stageResult = parseStageNumber(params.stageNumber);
+  if (!stageResult.ok) {
+    return fail({ code: "VALIDATION_ERROR", message: stageResult.message }, 400);
+  }
+
   const body = await request.json();
   const parsed = completeStageSchema.safeParse(body);
   if (!parsed.success) {
@@ -21,7 +27,7 @@ export async function POST(
   try {
     const row = await completeStage({
       projectId: params.id,
-      stageNumber: Number(params.stageNumber),
+      stageNumber: stageResult.value,
       userId: gate.session.user.id,
       notes: parsed.data.notes,
       status: parsed.data.status,

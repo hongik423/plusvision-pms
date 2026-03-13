@@ -112,17 +112,33 @@ export async function listProjects(params: {
   return { rows, total };
 }
 
+/**
+ * 프로젝트 번호 생성 — 동시성 안전한 방식
+ * [수정] count 기반이 아닌 마지막 번호 기반으로 변경하여 동시 요청 시 중복 방지
+ */
 export async function generateProjectNumber() {
   const year = new Date().getFullYear();
   const prefix = `PV-${year}-`;
-  const count = await prisma.project.count({
+
+  // 해당 연도의 마지막 프로젝트 번호를 조회
+  const lastProject = await prisma.project.findFirst({
     where: {
-      projectNumber: {
-        startsWith: prefix,
-      },
+      projectNumber: { startsWith: prefix },
     },
+    orderBy: { projectNumber: "desc" },
+    select: { projectNumber: true },
   });
-  return `${prefix}${String(count + 1).padStart(3, "0")}`;
+
+  let nextNumber = 1;
+  if (lastProject?.projectNumber) {
+    const lastNumberStr = lastProject.projectNumber.replace(prefix, "");
+    const lastNumber = parseInt(lastNumberStr, 10);
+    if (!isNaN(lastNumber)) {
+      nextNumber = lastNumber + 1;
+    }
+  }
+
+  return `${prefix}${String(nextNumber).padStart(3, "0")}`;
 }
 
 export async function createProject(input: CreateProjectInput) {

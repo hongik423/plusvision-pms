@@ -5,5 +5,10 @@ import { unreadCount } from "@/services/notification-service";
 export async function GET() {
   const gate = await requireApiRole("VIEWER");
   if (!gate.ok) return gate.response;
-  return ok({ count: await unreadCount(gate.session.user.id) });
+  try {
+    const count = await unreadCount(gate.session.user.id);
+    return ok({ count });
+  } catch {
+    return ok({ count: 0 });
+  }
 }

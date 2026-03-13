@@ -1,11 +1,4 @@
-import {
-  assigneeWorkload,
-  dashboardStats,
-  dashboardMyTasks,
-  monthlyPerformance,
-  recentActivities,
-  stageDistribution,
-} from "@/services/dashboard-service";
+import { fetchAllDashboardData } from "@/services/dashboard-service";
 import { requireSession } from "@/lib/rbac";
 import Link from "next/link";
 import { StageDistributionChart } from "@/components/dashboard/stage-distribution-chart";
@@ -29,21 +22,20 @@ export default async function DashboardPage({
     holdProjects: 0,
     myTasks: 0,
   };
-  let tasks: Awaited<ReturnType<typeof dashboardMyTasks>> = [];
-  let distributions: Awaited<ReturnType<typeof stageDistribution>> = [];
-  let activities: Awaited<ReturnType<typeof recentActivities>> = [];
-  let monthly: Awaited<ReturnType<typeof monthlyPerformance>> = [];
-  let workloads: Awaited<ReturnType<typeof assigneeWorkload>> = [];
+  let tasks: Awaited<ReturnType<typeof fetchAllDashboardData>>["tasks"] = [];
+  let distributions: Awaited<ReturnType<typeof fetchAllDashboardData>>["distributions"] = [];
+  let activities: Awaited<ReturnType<typeof fetchAllDashboardData>>["activities"] = [];
+  let monthly: Awaited<ReturnType<typeof fetchAllDashboardData>>["monthly"] = [];
+  let workloads: Awaited<ReturnType<typeof fetchAllDashboardData>>["workloads"] = [];
 
   try {
-    [stats, tasks, distributions, activities, monthly, workloads] = await Promise.all([
-      dashboardStats(userId),
-      dashboardMyTasks(userId),
-      stageDistribution(),
-      recentActivities(),
-      monthlyPerformance(6),
-      assigneeWorkload(),
-    ]);
+    const data = await fetchAllDashboardData(userId);
+    stats = data.stats;
+    tasks = data.tasks;
+    distributions = data.distributions;
+    activities = data.activities;
+    monthly = data.monthly;
+    workloads = data.workloads;
   } catch {
     dataError = "데이터베이스 연결이 일시적으로 불안정합니다. 잠시 후 다시 시도해 주세요.";
   }

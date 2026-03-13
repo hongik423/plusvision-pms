@@ -4,6 +4,10 @@ import GoogleProvider from "next-auth/providers/google";
 import { compare } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 
+// ─── 환경 판별 ───────────────────────────────────────────
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+
+// ─── 개발 전용 Fallback 계정 (프로덕션에서는 절대 사용 불가) ─────
 type DevFallbackUser = {
   id: string;
   email: string;
@@ -57,8 +61,17 @@ function hasInvalidDatabaseUrl() {
   return placeholderPatterns.some((pattern) => pattern.test(databaseUrl));
 }
 
+/**
+ * 개발 환경에서만 Fallback 계정을 반환합니다.
+ * 프로덕션 환경에서는 항상 null을 반환하여 보안을 보장합니다.
+ */
 function getDevFallbackAccount(email: string, password: string, forceWhenDbInvalid?: boolean) {
-  const demoLoginEnabled = forceWhenDbInvalid || process.env.DEMO_LOGIN_ENABLED !== "false";
+  // [보안 수정] 프로덕션 환경에서는 Fallback 계정을 절대 허용하지 않음
+  if (IS_PRODUCTION) {
+    return null;
+  }
+
+  const demoLoginEnabled = forceWhenDbInvalid || process.env.DEMO_LOGIN_ENABLED === "true";
   if (!demoLoginEnabled) {
     return null;
   }
@@ -77,9 +90,17 @@ function getDevFallbackAccount(email: string, password: string, forceWhenDbInval
 }
 
 export const authOptions: NextAuthOptions = {
-  secret: process.env.NEXTAUTH_SECRET ?? "pluspms-dev-secret-only",
+  secret: (() => {
+    const secret = process.env.NEXTAUTH_SECRET;
+    // [보안 수정] 프로덕션에서는 NEXTAUTH_SECRET이 반드시 설정되어 있어야 함
+    if (IS_PRODUCTION && !secret) {
+      throw new Error("프로덕션 환경에서 NEXTAUTH_SECRET 환경 변수가 설정되지 않았습니다.");
+    }
+    return secret ?? "pluspms-dev-secret-only";
+  })(),
   session: {
     strategy: "jwt",
+    maxAge: 24 * 60 * 60, // 24시간
   },
   providers: [
     CredentialsProvider({
@@ -105,9 +126,14 @@ export const authOptions: NextAuthOptions = {
         };
         const emailForLookup = loginIdAliasMap[normalizedLoginId] ?? normalizedLoginId;
         const invalidDb = hasInvalidDatabaseUrl();
-        const fallbackAccount = getDevFallbackAccount(emailForLookup, password, invalidDb);
+
+        // [보안 수정] 프로덕션에서 DB 연결 불가 시 로그인 차단
         if (invalidDb) {
-          return fallbackAccount;
+          if (IS_PRODUCTION) {
+            console.error("[Auth] 프로덕션 환경에서 DATABASE_URL이 유효하지 않습니다.");
+            return null;
+          }
+          return getDevFallbackAccount(emailForLookup, password, true);
         }
 
         try {
@@ -115,7 +141,9 @@ export const authOptions: NextAuthOptions = {
             where: { email: emailForLookup },
           });
           if (!user?.password || !user.isActive) {
-            return fallbackAccount;
+            // [보안 수정] DB에 사용자가 없을 때 프로덕션에서는 즉시 실패
+            if (IS_PRODUCTION) return null;
+            return getDevFallbackAccount(emailForLookup, password);
           }
 
           const valid = await compare(password, user.password);
@@ -127,10 +155,13 @@ export const authOptions: NextAuthOptions = {
               role: user.role,
             };
           }
-          // DB 비밀번호 불일치 시 데모 계정으로 폴백 (dev/테스트 환경 호환)
-          return fallbackAccount;
-        } catch {
-          // Prisma 연결 실패 시에도 데모 계정 허용 (DB 미설정/오류 시 로그인 가능)
+          // [보안 수정] 비밀번호 불일치 시 프로덕션에서는 폴백 없이 실패
+          if (IS_PRODUCTION) return null;
+          return getDevFallbackAccount(emailForLookup, password);
+        } catch (error) {
+          console.error("[Auth] DB 연결 오류:", error);
+          // [보안 수정] DB 오류 시 프로덕션에서는 절대 폴백 허용하지 않음
+          if (IS_PRODUCTION) return null;
           return getDevFallbackAccount(emailForLookup, password, true);
         }
       },
