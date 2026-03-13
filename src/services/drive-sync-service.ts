@@ -25,6 +25,7 @@ import {
   type DriveFileDescriptor,
 } from "@/scripts/migration/google-drive-adapter";
 import type { DocumentType } from "@prisma/client";
+import { createNotification } from "@/services/notification-service";
 
 const BUCKET = "projects";
 
@@ -328,6 +329,40 @@ export async function syncDriveFolder(
     data:  { lastSyncAt: new Date() },
   });
 
+  // ── 동기화 실패 알림 ──────────────────────────────────
+  if (result.failed > 0) {
+    try {
+      const failedNames = result.logs
+        .filter((l) => l.status === "FAILED")
+        .map((l) => l.fileName)
+        .slice(0, 5);
+      const preview = failedNames.join(", ") + (result.failed > 5 ? ` 외 ${result.failed - 5}건` : "");
+
+      // 프로젝트 매니저와 링크 생성자에게 알림 전송
+      const project = await prisma.project.findUnique({
+        where: { id: link.projectId },
+        select: { id: true, name: true, createdById: true },
+      });
+
+      const notifyUserIds = new Set<string>();
+      notifyUserIds.add(uploadedById);
+      if (project?.createdById) notifyUserIds.add(project.createdById);
+
+      for (const uid of notifyUserIds) {
+        await createNotification({
+          userId:    uid,
+          projectId: link.projectId,
+          type:      "DRIVE_SYNC_FAILED",
+          title:     `Drive 동기화 실패 (${result.failed}건)`,
+          message:   `프로젝트 "${project?.name ?? link.projectId}" — ${preview}`,
+          link:      `/projects/${link.projectId}/documents`,
+        });
+      }
+    } catch (notifyErr) {
+      console.error("[DriveSyncNotify] 알림 생성 실패:", notifyErr);
+    }
+  }
+
   return result;
 }
 
@@ -418,7 +453,7 @@ export async function handleWebhookSync(
 // ──────────────────────────────────────────
 // 9. 만료된 Watch 채널 자동 갱신 (배치용)
 // ──────────────────────────────────────────
-export async function renewExpiredWatches(webhookBaseUrl: string): Promise<number> {
+export async function renewExpiredWatches(webhookBaseUrl: string): Promise<{ renewed: number; failed: number }> {
   const soon = new Date(Date.now() + 24 * 60 * 60 * 1000);
   const expiring = await prismaDrive.driveLink.findMany({
     where: {
@@ -429,6 +464,8 @@ export async function renewExpiredWatches(webhookBaseUrl: string): Promise<numbe
   });
 
   let renewed = 0;
+  let failed = 0;
+
   for (const link of expiring) {
     try {
       if (link.channelId && link.channelToken) {
@@ -436,9 +473,24 @@ export async function renewExpiredWatches(webhookBaseUrl: string): Promise<numbe
       }
       await registerDriveWatch(link.id, webhookBaseUrl);
       renewed++;
-    } catch { /* 갱신 실패 무시 */ }
+    } catch (err) {
+      failed++;
+      // Watch 갱신 실패 알림
+      try {
+        await createNotification({
+          userId:    link.createdById,
+          projectId: link.projectId,
+          type:      "DRIVE_WATCH_EXPIRED",
+          title:     "Drive Watch 채널 갱신 실패",
+          message:   `폴더 "${link.folderName ?? link.driveFolderId}"의 실시간 감시가 중단되었습니다. 수동으로 재등록해 주세요.`,
+          link:      `/projects/${link.projectId}/documents`,
+        });
+      } catch {
+        console.error("[WatchRenew] 갱신 실패 알림 생성 오류");
+      }
+    }
   }
-  return renewed;
+  return { renewed, failed };
 }
 
 // ──────────────────────────────────────────

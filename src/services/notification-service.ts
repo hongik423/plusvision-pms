@@ -1,4 +1,27 @@
 import { prisma } from "@/lib/prisma";
+import { generatePlusPmsId } from "@/lib/id";
+
+// ── 알림 생성 ──────────────────────────────────────────
+export async function createNotification(params: {
+  userId: string;
+  projectId?: string | null;
+  type: string;
+  title: string;
+  message: string;
+  link?: string | null;
+}) {
+  return prisma.notification.create({
+    data: {
+      id: generatePlusPmsId("notification"),
+      userId:    params.userId,
+      projectId: params.projectId ?? undefined,
+      type:      params.type,
+      title:     params.title,
+      message:   params.message,
+      link:      params.link ?? undefined,
+    },
+  });
+}
 
 export async function listNotifications(userId: string) {
   return prisma.notification.findMany({

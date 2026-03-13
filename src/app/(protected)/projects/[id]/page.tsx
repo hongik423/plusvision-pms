@@ -24,7 +24,9 @@ export default async function ProjectDetailPage({ params }: { params: { id: stri
         orderBy: { name: "asc" },
       }),
     ]);
-  } catch {
+  } catch (err) {
+    // Vercel 서버 로그에 실제 오류 기록 (Functions 탭에서 확인)
+    console.error("[ProjectDetailPage] DB 조회 실패:", err instanceof Error ? err.message : err);
     return (
       <section className="rounded-xl border bg-white p-8 text-center">
         <p className="text-4xl mb-4">⚠️</p>
@@ -32,6 +34,11 @@ export default async function ProjectDetailPage({ params }: { params: { id: stri
         <p className="mt-3 text-sm text-slate-500">
           데이터베이스 연결이 일시적으로 불안정합니다. 잠시 후 다시 시도해 주세요.
         </p>
+        {process.env.NODE_ENV !== "production" && (
+          <pre className="mt-4 rounded bg-red-50 p-3 text-left text-xs text-red-700 overflow-auto max-h-40">
+            {err instanceof Error ? err.message : String(err)}
+          </pre>
+        )}
       </section>
     );
   }

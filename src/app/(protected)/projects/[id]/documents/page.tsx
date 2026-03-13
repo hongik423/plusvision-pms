@@ -10,13 +10,29 @@ type DocumentRow = {
   fileUrl: string;
   fileSize: number;
   mimeType: string;
+  version: number;
   documentType: keyof typeof DOCUMENT_TYPE_LABELS;
   description: string | null;
   createdAt: string;
   stage: {
+    id: string;
     stageNumber: number;
     stageName: string;
   };
+  uploadedBy?: {
+    id: string;
+    name: string | null;
+  } | null;
+};
+
+type VersionRow = {
+  id: string;
+  fileName: string;
+  fileUrl: string;
+  fileSize: number;
+  version: number;
+  createdAt: string;
+  uploadedBy?: { id: string; name: string | null } | null;
 };
 
 const DOCUMENT_TYPES = Object.keys(DOCUMENT_TYPE_LABELS) as Array<keyof typeof DOCUMENT_TYPE_LABELS>;
@@ -50,6 +66,15 @@ export default function ProjectDocumentsPage() {
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+
+  // 삭제 관련
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  // 버전 이력 관련
+  const [versionDocId, setVersionDocId] = useState<string | null>(null);
+  const [versions, setVersions] = useState<VersionRow[]>([]);
+  const [versionsLoading, setVersionsLoading] = useState(false);
 
   const fetchDocuments = useCallback(async () => {
     setListLoading(true);
@@ -123,7 +148,6 @@ export default function ProjectDocumentsPage() {
     formData.append("documentType", form.documentType);
     formData.append("description", form.description);
 
-    // XMLHttpRequest를 사용해 업로드 진행률 추적
     await new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.upload.addEventListener("progress", (event) => {
@@ -158,6 +182,48 @@ export default function ProjectDocumentsPage() {
       xhr.open("POST", `/api/v1/projects/${projectId}/documents`);
       xhr.send(formData);
     }).catch(() => {/* 오류는 uploadError state로 처리 */});
+  }
+
+  // ── 문서 삭제 ──────────────────────────────────────────
+  async function handleDelete(docId: string) {
+    setDeletingId(docId);
+    try {
+      const res = await fetch(`/api/v1/projects/${projectId}/documents/${docId}`, {
+        method: "DELETE",
+      });
+      const payload = await res.json();
+      if (payload.success) {
+        setRows((prev) => prev.filter((r) => r.id !== docId));
+      } else {
+        alert(payload.error?.message ?? "삭제에 실패했습니다.");
+      }
+    } catch {
+      alert("네트워크 오류로 삭제에 실패했습니다.");
+    } finally {
+      setDeletingId(null);
+      setDeleteConfirmId(null);
+    }
+  }
+
+  // ── 버전 이력 조회 ────────────────────────────────────
+  async function fetchVersions(docId: string) {
+    if (versionDocId === docId) {
+      // 토글: 같은 문서 클릭 시 닫기
+      setVersionDocId(null);
+      setVersions([]);
+      return;
+    }
+    setVersionDocId(docId);
+    setVersionsLoading(true);
+    try {
+      const res = await fetch(`/api/v1/projects/${projectId}/documents/${docId}/versions`);
+      const payload = await res.json();
+      setVersions(payload.data ?? []);
+    } catch {
+      setVersions([]);
+    } finally {
+      setVersionsLoading(false);
+    }
   }
 
   return (
@@ -225,7 +291,6 @@ export default function ProjectDocumentsPage() {
           {pendingFile ? (
             <div className="flex items-center gap-4 px-4 py-3 w-full">
               {previewUrl ? (
-                // 이미지 썸네일 미리보기
                 <img
                   src={previewUrl}
                   alt="미리보기"
@@ -304,7 +369,12 @@ export default function ProjectDocumentsPage() {
 
       {/* 문서 목록 */}
       <div className="rounded-xl border bg-white p-5">
-        <h2 className="mb-4 text-xl font-semibold">문서 목록</h2>
+        <h2 className="mb-4 text-xl font-semibold">
+          문서 목록
+          {rows.length > 0 && (
+            <span className="ml-2 text-sm font-normal text-slate-400">({rows.length}건)</span>
+          )}
+        </h2>
         {listLoading ? (
           <div className="flex items-center gap-2 py-8 text-sm text-slate-400">
             <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-blue-500" />
@@ -319,51 +389,168 @@ export default function ProjectDocumentsPage() {
         ) : (
           <ul className="space-y-2">
             {rows.map((row) => (
-              <li key={row.id} className="flex items-center gap-4 rounded-lg border px-4 py-3 hover:bg-slate-50 transition-colors">
-                {/* 이미지는 썸네일, 그 외는 아이콘 */}
-                {isImage(row.mimeType) ? (
-                  <img
-                    src={row.fileUrl}
-                    alt={row.fileName}
-                    className="h-12 w-12 rounded object-cover border flex-shrink-0"
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded border bg-slate-50 text-2xl">
-                    {row.fileName.endsWith(".pdf") ? "📄"
-                      : row.fileName.match(/\.(xlsx?|xls)$/i) ? "📊"
-                      : row.fileName.match(/\.(docx?|hwp)$/i) ? "📝"
-                      : row.fileName.match(/\.(dwg|dxf)$/i) ? "📐"
-                      : "📎"}
+              <li key={row.id}>
+                <div className="flex items-center gap-4 rounded-lg border px-4 py-3 hover:bg-slate-50 transition-colors">
+                  {/* 아이콘/썸네일 */}
+                  {isImage(row.mimeType) ? (
+                    <img
+                      src={row.fileUrl}
+                      alt={row.fileName}
+                      className="h-12 w-12 rounded object-cover border flex-shrink-0"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded border bg-slate-50 text-2xl">
+                      {row.fileName.endsWith(".pdf") ? "📄"
+                        : row.fileName.match(/\.(xlsx?|xls)$/i) ? "📊"
+                        : row.fileName.match(/\.(docx?|hwp)$/i) ? "📝"
+                        : row.fileName.match(/\.(dwg|dxf)$/i) ? "📐"
+                        : "📎"}
+                    </div>
+                  )}
+
+                  {/* 파일 정보 */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={row.fileUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="truncate font-semibold text-sm hover:text-blue-600 hover:underline"
+                      >
+                        {row.fileName}
+                      </a>
+                      {/* 버전 배지 */}
+                      <span className="flex-shrink-0 rounded bg-indigo-100 px-1.5 py-0.5 text-xs font-bold text-indigo-700">
+                        v{row.version}
+                      </span>
+                    </div>
+                    {row.description ? (
+                      <p className="text-xs text-slate-500 mt-0.5">{row.description}</p>
+                    ) : null}
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                      <span className="rounded bg-slate-100 px-1.5 py-0.5">{row.stage.stageNumber}단계</span>
+                      <span className="rounded bg-blue-100 px-1.5 py-0.5 text-blue-700">
+                        {DOCUMENT_TYPE_LABELS[row.documentType]}
+                      </span>
+                      <span>{formatBytes(row.fileSize)}</span>
+                      <span>{new Date(row.createdAt).toLocaleDateString("ko-KR")}</span>
+                      {row.uploadedBy?.name && (
+                        <span className="text-slate-400">· {row.uploadedBy.name}</span>
+                      )}
+                    </div>
                   </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <a
-                    href={row.fileUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="truncate font-semibold text-sm hover:text-blue-600 hover:underline"
-                  >
-                    {row.fileName}
-                  </a>
-                  {row.description ? (
-                    <p className="text-xs text-slate-500 mt-0.5">{row.description}</p>
-                  ) : null}
-                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-400">
-                    <span className="rounded bg-slate-100 px-1.5 py-0.5">{row.stage.stageNumber}단계</span>
-                    <span className="rounded bg-blue-100 px-1.5 py-0.5 text-blue-700">{DOCUMENT_TYPE_LABELS[row.documentType]}</span>
-                    <span>{formatBytes(row.fileSize)}</span>
-                    <span>{new Date(row.createdAt).toLocaleDateString("ko-KR")}</span>
+
+                  {/* 액션 버튼들 */}
+                  <div className="flex flex-shrink-0 items-center gap-1">
+                    {/* 버전 이력 버튼 */}
+                    <button
+                      type="button"
+                      onClick={() => fetchVersions(row.id)}
+                      className={`rounded border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                        versionDocId === row.id
+                          ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                          : "hover:bg-slate-100"
+                      }`}
+                      title="버전 이력"
+                    >
+                      📋 이력
+                    </button>
+
+                    {/* 다운로드 */}
+                    <a
+                      href={row.fileUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded border px-2.5 py-1.5 text-xs font-medium hover:bg-slate-100 transition-colors"
+                    >
+                      다운로드
+                    </a>
+
+                    {/* 삭제 */}
+                    {deleteConfirmId === row.id ? (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(row.id)}
+                          disabled={deletingId === row.id}
+                          className="rounded bg-red-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+                        >
+                          {deletingId === row.id ? "삭제 중..." : "확인"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteConfirmId(null)}
+                          className="rounded border px-2.5 py-1.5 text-xs font-medium hover:bg-slate-100"
+                        >
+                          취소
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setDeleteConfirmId(row.id)}
+                        className="rounded border border-red-200 px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
+                        title="문서 삭제"
+                      >
+                        삭제
+                      </button>
+                    )}
                   </div>
                 </div>
-                <a
-                  href={row.fileUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex-shrink-0 rounded border px-3 py-1.5 text-xs font-medium hover:bg-slate-100 transition-colors"
-                >
-                  다운로드
-                </a>
+
+                {/* 버전 이력 패널 (인라인 확장) */}
+                {versionDocId === row.id && (
+                  <div className="ml-16 mt-1 mb-2 rounded-lg border border-indigo-200 bg-indigo-50/50 p-3">
+                    <h4 className="text-xs font-bold text-indigo-700 mb-2">
+                      📋 &quot;{row.fileName}&quot; 버전 이력
+                    </h4>
+                    {versionsLoading ? (
+                      <div className="flex items-center gap-2 py-2 text-xs text-slate-400">
+                        <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-indigo-500" />
+                        로딩 중...
+                      </div>
+                    ) : versions.length === 0 ? (
+                      <p className="text-xs text-slate-400">버전 이력이 없습니다.</p>
+                    ) : (
+                      <ul className="space-y-1.5">
+                        {versions.map((v) => (
+                          <li
+                            key={v.id}
+                            className={`flex items-center gap-3 rounded px-2.5 py-1.5 text-xs ${
+                              v.id === row.id ? "bg-indigo-100 font-semibold" : "bg-white"
+                            }`}
+                          >
+                            <span className="rounded bg-indigo-200 px-1.5 py-0.5 font-bold text-indigo-800">
+                              v{v.version}
+                            </span>
+                            <span className="text-slate-500">{formatBytes(v.fileSize)}</span>
+                            <span className="text-slate-400">
+                              {new Date(v.createdAt).toLocaleString("ko-KR", {
+                                year: "numeric",
+                                month: "2-digit",
+                                day: "2-digit",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                            {v.uploadedBy?.name && (
+                              <span className="text-slate-400">· {v.uploadedBy.name}</span>
+                            )}
+                            <a
+                              href={v.fileUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="ml-auto text-indigo-600 hover:underline"
+                            >
+                              다운로드
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
               </li>
             ))}
           </ul>

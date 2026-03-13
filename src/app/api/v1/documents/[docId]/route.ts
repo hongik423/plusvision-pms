@@ -19,7 +19,7 @@ export async function DELETE(_request: Request, { params }: { params: { docId: s
   if (!gate.ok) {
     return gate.response;
   }
-  const row = await deleteDocument(params.docId);
+  const row = await deleteDocument(params.docId, gate.session.user.id);
   if (!row) {
     return fail({ code: "NOT_FOUND", message: "문서를 찾을 수 없습니다." }, 404);
   }

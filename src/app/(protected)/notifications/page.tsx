@@ -20,6 +20,8 @@ const TYPE_ICON: Record<string, string> = {
   NEXT_STAGE_READY: "▶️",
   PASSWORD_RESET_REQUEST: "🔑",
   PASSWORD_RESET_COMPLETED: "✅",
+  DRIVE_SYNC_FAILED: "⚠️",
+  DRIVE_WATCH_EXPIRED: "🔔",
 };
 
 export default function NotificationsPage() {

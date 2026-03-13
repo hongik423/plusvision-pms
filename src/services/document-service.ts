@@ -2,9 +2,11 @@ import { DocumentType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { generatePlusPmsId } from "@/lib/id";
+import { logAudit } from "@/lib/audit-logger";
 
 const BUCKET = "projects";
 
+// ── 문서 목록 조회 ──────────────────────────────────────────
 export async function listProjectDocuments(projectId: string) {
   return prisma.stageDocument.findMany({
     where: { stage: { projectId } },
@@ -13,6 +15,7 @@ export async function listProjectDocuments(projectId: string) {
   });
 }
 
+// ── 문서 업로드 (버전 자동 관리 + 감사 로그) ────────────────
 export async function uploadProjectDocument(input: {
   projectId: string;
   stageNumber: number;
@@ -33,6 +36,18 @@ export async function uploadProjectDocument(input: {
     throw new Error("단계를 찾을 수 없습니다.");
   }
 
+  // ── 버전 관리: 같은 단계 + 같은 파일명이 이미 있으면 version 증가 ──
+  const existingDocs = await prisma.stageDocument.findMany({
+    where: {
+      stageId: stage.id,
+      fileName: input.file.name,
+    },
+    orderBy: { version: "desc" },
+    take: 1,
+  });
+  const nextVersion = existingDocs.length > 0 ? existingDocs[0].version + 1 : 1;
+
+  // ── Supabase Storage 업로드 ──
   const buffer = Buffer.from(await input.file.arrayBuffer());
   const key = `${input.projectId}/stage-${input.stageNumber}/${Date.now()}-${input.file.name}`;
   const supabaseAdmin = getSupabaseAdmin();
@@ -46,7 +61,8 @@ export async function uploadProjectDocument(input: {
 
   const urlData = supabaseAdmin.storage.from(BUCKET).getPublicUrl(key);
 
-  return prisma.stageDocument.create({
+  // ── DB 기록 ──
+  const doc = await prisma.stageDocument.create({
     data: {
       id: generatePlusPmsId("stage_document"),
       stageId: stage.id,
@@ -55,13 +71,33 @@ export async function uploadProjectDocument(input: {
       fileUrl: urlData.data.publicUrl,
       fileSize: input.file.size,
       mimeType: input.file.type,
+      version: nextVersion,
       uploadedById: input.uploadedById,
       description: input.description,
     },
   });
+
+  // ── 감사 로그 ──
+  await logAudit({
+    userId: input.uploadedById,
+    projectId: input.projectId,
+    action: "DOCUMENT_UPLOAD",
+    entityType: "DOCUMENT",
+    entityId: doc.id,
+    changes: {
+      fileName: input.file.name,
+      fileSize: input.file.size,
+      mimeType: input.file.type,
+      documentType: input.documentType,
+      stageNumber: input.stageNumber,
+      version: nextVersion,
+    },
+  });
+
+  return doc;
 }
 
-// ── [N06] 프로젝트별 총 저장 용량 조회 ──
+// ── 프로젝트별 총 저장 용량 조회 ─────────────────────────────
 export async function getProjectStorageUsage(projectId: string): Promise<number> {
   const result = await prisma.stageDocument.aggregate({
     where: { stage: { projectId } },
@@ -70,6 +106,7 @@ export async function getProjectStorageUsage(projectId: string): Promise<number>
   return result._sum.fileSize ?? 0;
 }
 
+// ── 개별 문서 조회 ──────────────────────────────────────────
 export async function getDocumentById(docId: string) {
   return prisma.stageDocument.findUnique({
     where: { id: docId },
@@ -77,10 +114,61 @@ export async function getDocumentById(docId: string) {
   });
 }
 
-export async function deleteDocument(docId: string) {
-  const doc = await prisma.stageDocument.findUnique({ where: { id: docId } });
+// ── 문서의 버전 이력 조회 ───────────────────────────────────
+export async function getDocumentVersions(stageId: string, fileName: string) {
+  return prisma.stageDocument.findMany({
+    where: { stageId, fileName },
+    include: { uploadedBy: { select: { id: true, name: true } } },
+    orderBy: { version: "desc" },
+  });
+}
+
+// ── 문서 삭제 (Storage 파일도 삭제 + 감사 로그) ─────────────
+export async function deleteDocument(docId: string, deletedById: string) {
+  const doc = await prisma.stageDocument.findUnique({
+    where: { id: docId },
+    include: { stage: { select: { projectId: true, stageNumber: true } } },
+  });
   if (!doc) {
     return null;
   }
-  return prisma.stageDocument.delete({ where: { id: docId } });
+
+  // ── Supabase Storage에서 실제 파일 삭제 ──
+  if (doc.storageType === "SUPABASE" && doc.fileUrl) {
+    try {
+      const marker = `/storage/v1/object/public/${BUCKET}/`;
+      const idx = doc.fileUrl.indexOf(marker);
+      if (idx >= 0) {
+        const storageKey = doc.fileUrl.slice(idx + marker.length);
+        const supabaseAdmin = getSupabaseAdmin();
+        const { error } = await supabaseAdmin.storage.from(BUCKET).remove([storageKey]);
+        if (error) {
+          console.error("[DocumentService] Storage 파일 삭제 실패:", error.message);
+        }
+      }
+    } catch (err) {
+      console.error("[DocumentService] Storage 파일 삭제 중 오류:", err);
+    }
+  }
+
+  // ── DB 삭제 ──
+  const deleted = await prisma.stageDocument.delete({ where: { id: docId } });
+
+  // ── 감사 로그 ──
+  await logAudit({
+    userId: deletedById,
+    projectId: doc.stage.projectId,
+    action: "DOCUMENT_DELETE",
+    entityType: "DOCUMENT",
+    entityId: docId,
+    changes: {
+      fileName: doc.fileName,
+      fileSize: doc.fileSize,
+      documentType: doc.documentType,
+      stageNumber: doc.stage.stageNumber,
+      version: doc.version,
+    },
+  });
+
+  return deleted;
 }
