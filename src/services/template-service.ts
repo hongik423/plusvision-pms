@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export type DocumentTemplateType = "ESTIMATE" | "PROPOSAL";
 
@@ -14,7 +15,9 @@ export type DocumentTemplate = {
   updatedAt: string;
 };
 
-const templatesFilePath = resolve(process.cwd(), "data", "document-templates.json");
+// src/services 기준 → src/data/document-templates.json (cwd 무관, Vercel 배포 시에도 동작)
+const _dir = typeof __dirname !== "undefined" ? __dirname : dirname(fileURLToPath(import.meta.url));
+const templatesFilePath = resolve(_dir, "..", "data", "document-templates.json");
 
 function readTemplates() {
   if (!existsSync(templatesFilePath)) {
