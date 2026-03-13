@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
-  "installCommand": "npm install && npx prisma generate --schema src/prisma/schema.prisma && cd src && npm install",
+  "installCommand": "npm install && npm run db:generate && npm install --prefix src",
   "buildCommand": "touch .env && npm run build && cp -r src/.next .next && cp -r src/node_modules/.prisma node_modules/ && cp -r src/node_modules/@prisma node_modules/",
   "regions": ["icn1"],
   "crons": [
