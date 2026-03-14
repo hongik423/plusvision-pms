@@ -69,6 +69,74 @@ export default async function AdminMigrationPage() {
         </span>
       </div>
 
+      {/* ── Drive 파일명 변환 결과 ────────────────────── */}
+      <div className="rounded-xl border bg-white p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold">📁 Google Drive 파일명 변환 결과</h2>
+          <span className="rounded-full bg-green-100 text-green-700 px-3 py-1 text-sm font-semibold">
+            ✅ 오류 0 · 전체 완료
+          </span>
+        </div>
+
+        <div className="overflow-x-auto mb-5">
+          <table className="w-full text-sm">
+            <thead className="border-b bg-slate-50">
+              <tr>
+                <th className="p-3 text-left font-semibold text-slate-600">단계</th>
+                <th className="p-3 text-left font-semibold text-slate-600">대상</th>
+                <th className="p-3 text-right font-semibold text-slate-600">파일 수</th>
+                <th className="p-3 text-center font-semibold text-slate-600">결과</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { step: "1차", target: "삼성 (PV-001~006 상위 폴더)", count: 1035 },
+                { step: "1차", target: "디티에스 (DTS)", count: 25 },
+                { step: "1차", target: "바이코 / 벨류 / 포이스 / 원익포이스 / 테트라다인", count: 26 },
+                { step: "2차", target: "각 프로젝트 고유 하위폴더 재매핑 (PV-003 ~ 024)", count: 646 },
+              ].map((row, i) => (
+                <tr key={i} className="border-b hover:bg-slate-50">
+                  <td className="p-3">
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${row.step === "1차" ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"}`}>
+                      {row.step}
+                    </span>
+                  </td>
+                  <td className="p-3 text-slate-700">{row.target}</td>
+                  <td className="p-3 text-right font-mono font-semibold text-slate-800">
+                    {row.count.toLocaleString()}개
+                  </td>
+                  <td className="p-3 text-center text-green-600 font-semibold">✅ 완료</td>
+                </tr>
+              ))}
+              <tr className="bg-slate-50 font-bold border-t-2 border-slate-300">
+                <td className="p-3 text-slate-700">총계</td>
+                <td className="p-3 text-slate-700">24개 프로젝트</td>
+                <td className="p-3 text-right font-mono text-slate-900">1,732개</td>
+                <td className="p-3 text-center text-green-700">✅ 오류 0</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* 파일명 규칙 예시 */}
+        <div className="rounded-lg border bg-slate-900 p-4">
+          <p className="text-xs font-semibold text-slate-400 mb-3 uppercase tracking-wide">파일명 규칙 적용 예시</p>
+          <div className="space-y-1.5 font-mono text-xs text-green-400">
+            {[
+              { name: "[PV-2026-003-S10-001] IMK 사용방법.pptx", comment: "← 삼성 IMK 하위 프로젝트" },
+              { name: "[PV-2026-008-S07-001] DPF 제어보드 회로도.pdf", comment: "← DTS DPF 하위 프로젝트" },
+              { name: "[PV-2026-015-S07-001] Metal Leak 도면.pdf", comment: "← 테트라다인 하위 프로젝트" },
+              { name: "[PV-2026-018-S06-001] 견적서.xlsx", comment: "← 넥스틴 (신규)" },
+            ].map((ex, i) => (
+              <div key={i} className="flex flex-wrap gap-x-2">
+                <span className="text-green-300">{ex.name}</span>
+                <span className="text-slate-500">{ex.comment}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {/* 환경 변수 설정 상태 */}
       <div className="rounded-xl border bg-white p-5">
         <h2 className="mb-4 text-xl font-semibold">환경 변수 설정 상태</h2>
