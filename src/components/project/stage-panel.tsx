@@ -44,6 +44,8 @@ type Props = {
   driveFiles?: DriveStageFile[];
   /** Drive 파일 로딩 중 여부 */
   driveLoading?: boolean;
+  /** 동기화 완료 시 문서 목록 재조회 트리거 */
+  docsRefreshTrigger?: number;
 };
 
 const STATUS_LABEL: Record<StageData["status"], string> = {
@@ -84,6 +86,7 @@ export function StagePanel({
   onRefresh,
   driveFiles = [],
   driveLoading = false,
+  docsRefreshTrigger = 0,
 }: Props) {
   const toast = useToastStore();
   const [open, setOpen] = useState(
@@ -114,6 +117,13 @@ export function StagePanel({
       setDocsFetched(true);
     }
   }, [projectId, stage.stageNumber, docsFetched]);
+
+  // docsRefreshTrigger 변경 시 문서 캐시 무효화 (동기화 완료 후 재조회)
+  useEffect(() => {
+    if (docsRefreshTrigger > 0) {
+      setDocsFetched(false);
+    }
+  }, [docsRefreshTrigger]);
 
   useEffect(() => {
     if (open && !docsFetched) {

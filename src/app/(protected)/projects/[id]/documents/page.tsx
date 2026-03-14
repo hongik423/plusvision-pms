@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { DOCUMENT_TYPE_LABELS, STAGE_NAMES } from "@/lib/constants";
 
 type DocumentRow = {
@@ -51,6 +51,7 @@ function isImage(mimeType: string) {
 
 export default function ProjectDocumentsPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const projectId = params?.id ?? "";
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -168,6 +169,7 @@ export default function ProjectDocumentsPage() {
           setPreviewUrl(null);
           setForm((prev) => ({ ...prev, description: "" }));
           await fetchDocuments();
+          router.refresh();
           resolve();
         } catch {
           setUploadError("응답 처리 중 오류가 발생했습니다.");
