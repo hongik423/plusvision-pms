@@ -67,6 +67,7 @@ export const KNOWN_PROJECT_GROUPS: Record<string, string> = {
   포이스:     "1TB10kdUpVUKgzm5ZrzoUz881Xxw5c2pl",
   원익포이스: "1sDhtJh97IlgHlG8OXjbOwjM-Yp_BFRPo",
   디티에스:   "1jEV7uwUlfTCDrUPTS2S7CCBHXRSWsGov",
+  DTS:        "1jEV7uwUlfTCDrUPTS2S7CCBHXRSWsGov",
   테트라다인: "1Laalbfts5T4IWFHHhgKWNaD9hvhnsurl",
   "거래 업체":  "1P0IYQkoixv_xEoKFbUSrtizgL8YzLYfa",
   "사람별 프로젝트": "1U8FfwJmuYMfJYcz6reG17E4KghTrgTZI",
@@ -135,13 +136,20 @@ export const FOLDER_STAGE_KEYWORDS: Array<{
   { keywords: ["견적", "적산", "estimate", "quote"], stageNumber: 6,  documentType: "ESTIMATE" },
   { keywords: ["제작", "도면", "부품", "manufacture", "drawing", "parts"], stageNumber: 7, documentType: "DRAWING" },
   { keywords: ["설치", "납품", "install", "delivery"], stageNumber: 8,  documentType: "INSTALL_MANUAL" },
-  { keywords: ["실적", "성과", "result"],            stageNumber: 9,  documentType: "OTHER" },
+  { keywords: ["실적", "성과", "result", "정산", "매출", "매입"], stageNumber: 9, documentType: "OTHER" },
   { keywords: ["최종", "아카이브", "정리", "archive"], stageNumber: 10, documentType: "OTHER" },
   // 삼성 프로젝트 특화 키워드
   { keywords: ["공사", "대응"],                      stageNumber: 3,  documentType: "OTHER" },
   { keywords: ["연락처", "담당자"],                   stageNumber: 2,  documentType: "OTHER" },
   { keywords: ["환경", "안전"],                      stageNumber: 3,  documentType: "OTHER" },
   { keywords: ["홀드", "hold", "보류"],              stageNumber: 4,  documentType: "OTHER" },
+  // DTS / 선박 / 일반 제조 프로젝트 특화 키워드
+  { keywords: ["발주서", "발주"],                     stageNumber: 6,  documentType: "ESTIMATE" },
+  { keywords: ["단가", "단가표"],                     stageNumber: 6,  documentType: "ESTIMATE" },
+  { keywords: ["선박", "보드", "패널", "개발", "릴레이", "배선", "레이아웃"], stageNumber: 7, documentType: "OTHER" },
+  { keywords: ["dpf", "차압"],                       stageNumber: 7,  documentType: "OTHER" },
+  { keywords: ["영광"],                              stageNumber: 3,  documentType: "SITE_PHOTO" },
+  { keywords: ["업무"],                              stageNumber: 1,  documentType: "OTHER" },
 ];
 
 /**

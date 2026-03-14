@@ -23,6 +23,10 @@ export interface GoogleDriveAdapter {
   downloadFile(fileId: string, mimeType?: string): Promise<Buffer>;
   /** 현재 액세스 토큰 반환 (진단/검증용) */
   getAccessToken(): Promise<string>;
+  /** Drive 파일명 변경 (OAuth2 필수 — API Key로는 불가) */
+  renameFile(fileId: string, newName: string): Promise<{ id: string; name: string }>;
+  /** Drive 폴더 생성 */
+  createFolder(name: string, parentFolderId: string): Promise<{ id: string; name: string }>;
 }
 
 // ─────────────────────────────────────────────
@@ -62,6 +66,12 @@ export class DisabledGoogleDriveAdapter implements GoogleDriveAdapter {
   async getAccessToken(): Promise<string> {
     throw new Error("Google Drive 실연동 비활성화");
   }
+  async renameFile(_fileId: string, _newName: string): Promise<{ id: string; name: string }> {
+    throw new Error("Google Drive 실연동 비활성화: 파일명 변경 불가");
+  }
+  async createFolder(_name: string, _parentFolderId: string): Promise<{ id: string; name: string }> {
+    throw new Error("Google Drive 실연동 비활성화: 폴더 생성 불가");
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -90,6 +100,14 @@ export class ApiKeyGoogleDriveAdapter implements GoogleDriveAdapter {
     }
     return apiKeyDownload(this.apiKey, fileId);
   }
+
+  async renameFile(_fileId: string, _newName: string): Promise<{ id: string; name: string }> {
+    throw new Error("API Key 방식은 읽기 전용입니다. 파일명 변경은 OAuth2 인증이 필요합니다.");
+  }
+
+  async createFolder(_name: string, _parentFolderId: string): Promise<{ id: string; name: string }> {
+    throw new Error("API Key 방식은 읽기 전용입니다. 폴더 생성은 OAuth2 인증이 필요합니다.");
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -102,7 +120,8 @@ async function apiKeyListPage(
 ): Promise<{ files: DriveFileDescriptor[]; nextPageToken?: string }> {
   const query = encodeURIComponent(`'${folderId}' in parents and trashed=false`);
   const fields = encodeURIComponent("nextPageToken,files(id,name,mimeType,size,modifiedTime,webViewLink)");
-  let url = `https://www.googleapis.com/drive/v3/files?q=${query}&fields=${fields}&pageSize=1000&key=${apiKey}`;
+  // supportsAllDrives + includeItemsFromAllDrives: 공유 드라이브(Shared Drive/Team Drive) 파일 포함
+  let url = `https://www.googleapis.com/drive/v3/files?q=${query}&fields=${fields}&pageSize=1000&supportsAllDrives=true&includeItemsFromAllDrives=true&key=${apiKey}`;
   if (pageToken) url += `&pageToken=${encodeURIComponent(pageToken)}`;
 
   const res = await fetch(url);
@@ -141,7 +160,8 @@ async function apiKeyListAll(apiKey: string, folderId: string): Promise<DriveFil
 }
 
 async function apiKeyDownload(apiKey: string, fileId: string): Promise<Buffer> {
-  const url = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${apiKey}`;
+  // supportsAllDrives=true: 공유 드라이브 파일 다운로드 지원
+  const url = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true&key=${apiKey}`;
   const res = await fetch(url);
   if (!res.ok) {
     const body = await res.text();
@@ -151,7 +171,8 @@ async function apiKeyDownload(apiKey: string, fileId: string): Promise<Buffer> {
 }
 
 async function apiKeyExport(apiKey: string, fileId: string, exportMimeType: string): Promise<Buffer> {
-  const url = `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=${encodeURIComponent(exportMimeType)}&key=${apiKey}`;
+  // supportsAllDrives=true: 공유 드라이브 Google Docs/Sheets/Slides export 지원
+  const url = `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=${encodeURIComponent(exportMimeType)}&supportsAllDrives=true&key=${apiKey}`;
   const res = await fetch(url);
   if (!res.ok) {
     const body = await res.text();
@@ -164,17 +185,28 @@ async function apiKeyListRecursive(
   apiKey: string,
   folderId: string,
   basePath: string,
+  depth = 0,
 ): Promise<DriveFileDescriptor[]> {
-  const items = await apiKeyListAll(apiKey, folderId);
+  // 무한 재귀 방지 (최대 5단계)
+  if (depth > 5) return [];
+
+  let items: DriveFileDescriptor[];
+  try {
+    items = await apiKeyListAll(apiKey, folderId);
+  } catch (err) {
+    console.warn(`[DriveAdapter] 폴더 ${folderId} 탐색 실패 (depth=${depth}):`, err);
+    return [];
+  }
+
   const result: DriveFileDescriptor[] = [];
 
   for (const item of items) {
     if (item.mimeType === FOLDER_MIME) {
       const subPath = basePath ? `${basePath}/${item.name}` : item.name;
-      const children = await apiKeyListRecursive(apiKey, item.id, subPath);
+      const children = await apiKeyListRecursive(apiKey, item.id, subPath, depth + 1);
       result.push(...children);
     } else {
-      result.push({ ...item, relativePath: basePath });
+      result.push({ ...item, relativePath: basePath || undefined });
     }
   }
 
@@ -191,7 +223,8 @@ async function driveListPage(
 ): Promise<{ files: DriveFileDescriptor[]; nextPageToken?: string }> {
   const query = encodeURIComponent(`'${folderId}' in parents and trashed=false`);
   const fields = encodeURIComponent("nextPageToken,files(id,name,mimeType,size,modifiedTime,webViewLink)");
-  let url = `https://www.googleapis.com/drive/v3/files?q=${query}&fields=${fields}&pageSize=1000`;
+  // supportsAllDrives + includeItemsFromAllDrives: 공유 드라이브(Shared Drive/Team Drive) 파일 포함
+  let url = `https://www.googleapis.com/drive/v3/files?q=${query}&fields=${fields}&pageSize=1000&supportsAllDrives=true&includeItemsFromAllDrives=true`;
   if (pageToken) url += `&pageToken=${encodeURIComponent(pageToken)}`;
 
   const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
@@ -250,6 +283,57 @@ async function driveExport(accessToken: string, fileId: string, exportMimeType: 
 }
 
 // ─────────────────────────────────────────────
+// OAuth 방식 파일명 변경 / 폴더 생성
+// ─────────────────────────────────────────────
+async function driveRenameFile(
+  accessToken: string,
+  fileId: string,
+  newName: string,
+): Promise<{ id: string; name: string }> {
+  const url = `https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true`;
+  const res = await fetch(url, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ name: newName }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Drive files.update(rename) 실패 (${res.status}): ${body}`);
+  }
+  const data = (await res.json()) as { id: string; name: string };
+  return { id: data.id, name: data.name };
+}
+
+async function driveCreateFolder(
+  accessToken: string,
+  name: string,
+  parentFolderId: string,
+): Promise<{ id: string; name: string }> {
+  const url = "https://www.googleapis.com/drive/v3/files?supportsAllDrives=true";
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      name,
+      mimeType: FOLDER_MIME,
+      parents: [parentFolderId],
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Drive files.create(folder) 실패 (${res.status}): ${body}`);
+  }
+  const data = (await res.json()) as { id: string; name: string };
+  return { id: data.id, name: data.name };
+}
+
+// ─────────────────────────────────────────────
 // AccessTokenGoogleDriveAdapter (단기 토큰)
 // ─────────────────────────────────────────────
 export class AccessTokenGoogleDriveAdapter implements GoogleDriveAdapter {
@@ -271,6 +355,14 @@ export class AccessTokenGoogleDriveAdapter implements GoogleDriveAdapter {
       return driveExport(this.accessToken, fileId, exportInfo.exportMimeType);
     }
     return driveDownload(this.accessToken, fileId);
+  }
+
+  async renameFile(fileId: string, newName: string): Promise<{ id: string; name: string }> {
+    return driveRenameFile(this.accessToken, fileId, newName);
+  }
+
+  async createFolder(name: string, parentFolderId: string): Promise<{ id: string; name: string }> {
+    return driveCreateFolder(this.accessToken, name, parentFolderId);
   }
 }
 
@@ -363,6 +455,16 @@ export class OAuth2GoogleDriveAdapter implements GoogleDriveAdapter {
     }
     return driveDownload(token, fileId);
   }
+
+  async renameFile(fileId: string, newName: string): Promise<{ id: string; name: string }> {
+    const token = await this.getAccessToken();
+    return driveRenameFile(token, fileId, newName);
+  }
+
+  async createFolder(name: string, parentFolderId: string): Promise<{ id: string; name: string }> {
+    const token = await this.getAccessToken();
+    return driveCreateFolder(token, name, parentFolderId);
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -372,18 +474,28 @@ async function listRecursive(
   accessToken: string,
   folderId: string,
   basePath: string,
+  depth = 0,
 ): Promise<DriveFileDescriptor[]> {
-  const items = await driveListAll(accessToken, folderId);
+  if (depth > 5) return [];
+
+  let items: DriveFileDescriptor[];
+  try {
+    items = await driveListAll(accessToken, folderId);
+  } catch (err) {
+    console.warn(`[DriveAdapter] OAuth 폴더 ${folderId} 탐색 실패 (depth=${depth}):`, err);
+    return [];
+  }
+
   const result: DriveFileDescriptor[] = [];
 
   for (const item of items) {
     if (item.mimeType === FOLDER_MIME) {
       // 폴더: 재귀 탐색
       const subPath = basePath ? `${basePath}/${item.name}` : item.name;
-      const children = await listRecursive(accessToken, item.id, subPath);
+      const children = await listRecursive(accessToken, item.id, subPath, depth + 1);
       result.push(...children);
     } else {
-      result.push({ ...item, relativePath: basePath });
+      result.push({ ...item, relativePath: basePath || undefined });
     }
   }
 
@@ -392,22 +504,24 @@ async function listRecursive(
 
 // ─────────────────────────────────────────────
 // 팩토리 함수 (환경 변수 기반 자동 선택)
-// 우선순위: API Key → OAuth2 → AccessToken → Disabled
+// 우선순위: OAuth2 → API Key → AccessToken → Disabled
+// OAuth2가 있으면 읽기+쓰기 모두 가능하므로 최우선 사용
 // ─────────────────────────────────────────────
 export function createGoogleDriveAdapter(): GoogleDriveAdapter {
-  // 1순위: API Key (공유 폴더 — 가장 간단, OAuth 불필요)
-  const apiKey = process.env.GOOGLE_DRIVE_API_KEY;
-  if (apiKey) {
-    return new ApiKeyGoogleDriveAdapter(apiKey);
-  }
-
-  // 2순위: OAuth2 (비공개 폴더 접근 시)
-  const clientId     = process.env.GOOGLE_DRIVE_CLIENT_ID     || process.env.GOOGLE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_DRIVE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET;
+  // 1순위: OAuth2 (파일명 변경/폴더 생성 등 쓰기 작업 포함 — 최우선)
+  // GOOGLE_DRIVE_CLIENT_ID 는 Drive 전용 (로그인용 GOOGLE_CLIENT_ID와 구분)
+  const clientId     = process.env.GOOGLE_DRIVE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_DRIVE_CLIENT_SECRET;
   const refreshToken = process.env.GOOGLE_DRIVE_REFRESH_TOKEN;
 
   if (clientId && clientSecret && refreshToken) {
     return new OAuth2GoogleDriveAdapter(clientId, clientSecret, refreshToken);
+  }
+
+  // 2순위: API Key (읽기 전용 — 파일명 변경 불가)
+  const apiKey = process.env.GOOGLE_DRIVE_API_KEY;
+  if (apiKey) {
+    return new ApiKeyGoogleDriveAdapter(apiKey);
   }
 
   // 3순위: 단기 토큰

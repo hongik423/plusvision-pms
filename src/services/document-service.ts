@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { generatePlusPmsId } from "@/lib/id";
 import { logAudit } from "@/lib/audit-logger";
+import { generateDocumentNumber, buildDriveFileName } from "@/lib/naming-convention";
 
 const BUCKET = "projects";
 
@@ -47,9 +48,36 @@ export async function uploadProjectDocument(input: {
   });
   const nextVersion = existingDocs.length > 0 ? existingDocs[0].version + 1 : 1;
 
+  // ── 문서 번호 자동 생성 (PV-2026-008-S06-001 형식) ──
+  let documentNumber: string | undefined;
+  try {
+    const project = await prisma.project.findUnique({
+      where: { id: input.projectId },
+      select: { projectNumber: true },
+    });
+    if (project?.projectNumber) {
+      documentNumber = await generateDocumentNumber(
+        project.projectNumber,
+        input.stageNumber,
+        stage.id,
+      );
+    }
+  } catch (err) {
+    console.warn("[DocumentService] 문서 번호 생성 실패 (비필수):", err);
+  }
+
+  // description에 문서 번호를 포함 (사용자가 별도로 지정한 경우 유지)
+  const finalDescription = input.description
+    ? input.description
+    : documentNumber ?? undefined;
+
   // ── Supabase Storage 업로드 ──
   const buffer = Buffer.from(await input.file.arrayBuffer());
-  const key = `${input.projectId}/stage-${input.stageNumber}/${Date.now()}-${input.file.name}`;
+  // 넘버링이 있으면 파일명에 접두사 부여
+  const storedFileName = documentNumber
+    ? buildDriveFileName(documentNumber, input.file.name)
+    : input.file.name;
+  const key = `${input.projectId}/stage-${input.stageNumber}/${Date.now()}-${storedFileName}`;
   const supabaseAdmin = getSupabaseAdmin();
   const upload = await supabaseAdmin.storage.from(BUCKET).upload(key, buffer, {
     contentType: input.file.type,
@@ -67,13 +95,13 @@ export async function uploadProjectDocument(input: {
       id: generatePlusPmsId("stage_document"),
       stageId: stage.id,
       documentType: input.documentType,
-      fileName: input.file.name,
+      fileName: storedFileName,
       fileUrl: urlData.data.publicUrl,
       fileSize: input.file.size,
       mimeType: input.file.type,
       version: nextVersion,
       uploadedById: input.uploadedById,
-      description: input.description,
+      description: finalDescription,
     },
   });
 

@@ -1,9 +1,10 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { STAGE_NAMES, STAGE_DESCRIPTIONS, STAGE_STATUS_COLORS, PROJECT_STATUS_LABELS } from "@/lib/constants";
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import { STAGE_NAMES, STAGE_DESCRIPTIONS, DOCUMENT_TYPE_LABELS, PROJECT_STATUS_LABELS } from "@/lib/constants";
 import { useToastStore } from "@/store/toast-store";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import type { DriveStageFile } from "@/app/(protected)/projects/[id]/project-detail-client";
 
 type StageData = {
   id: string;
@@ -17,15 +18,32 @@ type StageData = {
   notes: string | null;
 };
 
+type StageDoc = {
+  id: string;
+  fileName: string;
+  fileUrl: string;
+  fileSize: number;
+  mimeType: string;
+  version: number;
+  documentType: string;
+  description: string | null;
+  storageType: string;
+  createdAt: string;
+};
+
 type UserOption = { id: string; name: string };
 
 type Props = {
   projectId: string;
   stage: StageData;
-  canManage: boolean; // ADMIN or MANAGER
-  isAssignee: boolean; // 현재 사용자가 담당자
+  canManage: boolean;
+  isAssignee: boolean;
   users: UserOption[];
   onRefresh: () => void;
+  /** Drive에서 직접 조회한 파일 (부모 컴포넌트에서 전달) */
+  driveFiles?: DriveStageFile[];
+  /** Drive 파일 로딩 중 여부 */
+  driveLoading?: boolean;
 };
 
 const STATUS_LABEL: Record<StageData["status"], string> = {
@@ -35,6 +53,28 @@ const STATUS_LABEL: Record<StageData["status"], string> = {
   SKIPPED: "건너뜀",
 };
 
+function formatBytes(bytes: number) {
+  if (!bytes || bytes === 0) return "—";
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+}
+
+function formatDate(dateStr: string | null) {
+  if (!dateStr) return "";
+  return new Date(dateStr).toLocaleDateString("ko-KR");
+}
+
+function getFileIcon(fileName: string, mimeType: string) {
+  if (mimeType.startsWith("image/")) return "🖼️";
+  if (fileName.endsWith(".pdf") || mimeType === "application/pdf") return "📄";
+  if (/\.(xlsx?|xls)$/i.test(fileName) || mimeType.includes("spreadsheet")) return "📊";
+  if (/\.(docx?|hwp)$/i.test(fileName) || mimeType.includes("document")) return "📝";
+  if (/\.(pptx?|ppt)$/i.test(fileName) || mimeType.includes("presentation")) return "📊";
+  if (/\.(dwg|dxf)$/i.test(fileName)) return "📐";
+  return "📎";
+}
+
 export function StagePanel({
   projectId,
   stage,
@@ -42,15 +82,50 @@ export function StagePanel({
   isAssignee,
   users,
   onRefresh,
+  driveFiles = [],
+  driveLoading = false,
 }: Props) {
   const toast = useToastStore();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(
+    stage.status === "COMPLETED" || stage.status === "ACTIVE",
+  );
   const [assigneeId, setAssigneeId] = useState(stage.assigneeId ?? "");
   const [notes, setNotes] = useState(stage.notes ?? "");
   const [saving, setSaving] = useState(false);
 
+  // ── DB 문서 (StageDocument) ──
+  const [docs, setDocs] = useState<StageDoc[]>([]);
+  const [docsLoading, setDocsLoading] = useState(false);
+  const [docsFetched, setDocsFetched] = useState(false);
+
+  const fetchDocs = useCallback(async () => {
+    if (docsFetched) return;
+    setDocsLoading(true);
+    try {
+      const res = await fetch(`/api/v1/projects/${projectId}/stages/${stage.stageNumber}`);
+      const payload = await res.json();
+      if (payload.success && payload.data?.documents) {
+        setDocs(payload.data.documents);
+      }
+    } catch {
+      // 조회 실패 시 빈 배열 유지
+    } finally {
+      setDocsLoading(false);
+      setDocsFetched(true);
+    }
+  }, [projectId, stage.stageNumber, docsFetched]);
+
+  useEffect(() => {
+    if (open && !docsFetched) {
+      void fetchDocs();
+    }
+  }, [open, docsFetched, fetchDocs]);
+
   const canComplete = (canManage || isAssignee) && stage.status === "ACTIVE";
   const canAssign = canManage;
+
+  // 전체 문서 수 (DB + Drive)
+  const totalDocCount = docs.length + driveFiles.length;
 
   const statusBg =
     stage.status === "COMPLETED"
@@ -119,6 +194,9 @@ export function StagePanel({
           </p>
           <p className="text-xs text-slate-500 mt-0.5">
             담당: {stage.assignee?.name ?? "미지정"} · {STATUS_LABEL[stage.status]}
+            {totalDocCount > 0 && (
+              <span className="ml-1 text-blue-500">· 문서 {totalDocCount}건</span>
+            )}
           </p>
         </div>
         <span className="text-slate-400 text-sm">{open ? "▲" : "▼"}</span>
@@ -149,6 +227,152 @@ export function StagePanel({
               {stage.notes}
             </div>
           )}
+
+          {/* ── Google Drive 문서 (실시간 조회) ──────────────── */}
+          {(driveFiles.length > 0 || driveLoading) && (
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-semibold text-green-700 flex items-center gap-1">
+                  <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
+                  Google Drive 문서
+                </span>
+                <span className="text-[10px] text-slate-400">({driveFiles.length}건)</span>
+              </div>
+
+              {driveLoading ? (
+                <div className="flex items-center gap-2 py-3 text-xs text-slate-400">
+                  <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-green-500" />
+                  Drive 파일 조회 중...
+                </div>
+              ) : (
+                <ul className="space-y-1.5">
+                  {driveFiles.map((file) => (
+                    <li
+                      key={file.id}
+                      className="flex items-center gap-2.5 rounded-lg border border-green-100 bg-white px-3 py-2 hover:bg-green-50 transition-colors"
+                    >
+                      <span className="text-lg flex-shrink-0">
+                        {getFileIcon(file.fileName, file.mimeType)}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <a
+                          href={file.fileUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs font-semibold text-slate-700 hover:text-green-600 hover:underline truncate block"
+                          title={file.relativePath ? `경로: ${file.relativePath}/${file.fileName}` : file.fileName}
+                        >
+                          {file.fileName}
+                        </a>
+                        <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-400">
+                          <span className="rounded bg-green-100 px-1 py-0.5 text-green-700 font-medium">
+                            Drive
+                          </span>
+                          <span className="rounded bg-blue-100 px-1 py-0.5 text-blue-700">
+                            {DOCUMENT_TYPE_LABELS[file.documentType as keyof typeof DOCUMENT_TYPE_LABELS] ?? file.documentType}
+                          </span>
+                          {file.relativePath && (
+                            <span className="text-slate-300 truncate max-w-[120px]" title={file.relativePath}>
+                              📂 {file.relativePath}
+                            </span>
+                          )}
+                          <span>{formatBytes(file.fileSize)}</span>
+                          {file.modifiedTime && (
+                            <span>{formatDate(file.modifiedTime)}</span>
+                          )}
+                        </div>
+                      </div>
+                      <a
+                        href={file.fileUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex-shrink-0 rounded border border-green-300 bg-green-50 px-2 py-1 text-[10px] font-medium text-green-700 hover:bg-green-100"
+                      >
+                        열기
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {/* ── DB 문서 (Supabase 동기화 완료) ──────────────── */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-slate-500 flex items-center gap-1">
+                  <span className="inline-block h-2 w-2 rounded-full bg-blue-500" />
+                  시스템 문서
+                </span>
+                {docs.length > 0 && <span className="text-[10px] text-slate-400">({docs.length}건)</span>}
+              </div>
+              {docsFetched && (
+                <button
+                  type="button"
+                  onClick={() => { setDocsFetched(false); void fetchDocs(); }}
+                  className="text-xs text-blue-500 hover:underline"
+                >
+                  새로고침
+                </button>
+              )}
+            </div>
+
+            {docsLoading ? (
+              <div className="flex items-center gap-2 py-3 text-xs text-slate-400">
+                <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-blue-500" />
+                문서 조회 중...
+              </div>
+            ) : docs.length === 0 && driveFiles.length === 0 ? (
+              <div className="rounded border border-dashed bg-white py-4 text-center text-xs text-slate-400">
+                등록된 문서가 없습니다
+              </div>
+            ) : docs.length === 0 ? null : (
+              <ul className="space-y-1.5">
+                {docs.map((doc) => (
+                  <li
+                    key={doc.id}
+                    className="flex items-center gap-2.5 rounded-lg border bg-white px-3 py-2 hover:bg-blue-50 transition-colors"
+                  >
+                    <span className="text-lg flex-shrink-0">
+                      {getFileIcon(doc.fileName, doc.mimeType)}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <a
+                        href={doc.fileUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs font-semibold text-slate-700 hover:text-blue-600 hover:underline truncate block"
+                      >
+                        {doc.fileName}
+                      </a>
+                      <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-400">
+                        <span className="rounded bg-blue-100 px-1 py-0.5 text-blue-700">
+                          {DOCUMENT_TYPE_LABELS[doc.documentType as keyof typeof DOCUMENT_TYPE_LABELS] ?? doc.documentType}
+                        </span>
+                        <span className="rounded bg-indigo-100 px-1 py-0.5 text-indigo-700 font-bold">
+                          v{doc.version}
+                        </span>
+                        {doc.storageType === "GOOGLE_DRIVE" && (
+                          <span className="rounded bg-green-100 px-1 py-0.5 text-green-700">Drive</span>
+                        )}
+                        <span>{formatBytes(doc.fileSize)}</span>
+                        <span>{new Date(doc.createdAt).toLocaleDateString("ko-KR")}</span>
+                      </div>
+                    </div>
+                    <a
+                      href={doc.fileUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex-shrink-0 rounded border px-2 py-1 text-[10px] font-medium hover:bg-slate-100"
+                    >
+                      열기
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
 
           {/* 담당자 지정 (MANAGER/ADMIN만) */}
           {canAssign && stage.status !== "COMPLETED" && (
