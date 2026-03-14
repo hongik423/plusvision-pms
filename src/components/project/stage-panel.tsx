@@ -46,6 +46,10 @@ type Props = {
   driveLoading?: boolean;
   /** 동기화 완료 시 문서 목록 재조회 트리거 */
   docsRefreshTrigger?: number;
+  /** 해당 단계 매핑된 문서 저장 (Drive → 시스템) */
+  onSyncStage?: (stageNumber: number) => Promise<void>;
+  /** 매핑된 문서 저장 진행 중 (버튼 비활성화) */
+  syncing?: boolean;
 };
 
 const STATUS_LABEL: Record<StageData["status"], string> = {
@@ -87,6 +91,8 @@ export function StagePanel({
   driveFiles = [],
   driveLoading = false,
   docsRefreshTrigger = 0,
+  onSyncStage,
+  syncing = false,
 }: Props) {
   const toast = useToastStore();
   const [open, setOpen] = useState(
@@ -322,6 +328,16 @@ export function StagePanel({
                     </li>
                   ))}
                 </ul>
+              )}
+              {canManage && unsyncedDriveFiles.length > 0 && onSyncStage && (
+                <button
+                  type="button"
+                  onClick={() => void onSyncStage(stage.stageNumber)}
+                  disabled={syncing}
+                  className="mt-2 w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
+                >
+                  {syncing ? "저장 중..." : `${stage.stageNumber}단계 매핑된 문서 저장`}
+                </button>
               )}
             </div>
           )}

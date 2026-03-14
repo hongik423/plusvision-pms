@@ -27,7 +27,8 @@ import {
   getExportInfo,
   type DriveFileDescriptor,
 } from "@/scripts/migration/google-drive-adapter";
-import { KNOWN_PROJECT_GROUPS, inferStageFromFolderName } from "@/lib/drive-config";
+import { inferStageFromFolderName } from "@/lib/drive-config";
+import { discoverDriveFolderByProject } from "@/services/drive-sync-service";
 
 export const dynamic = "force-dynamic";
 
@@ -240,42 +241,12 @@ export async function GET(
       folderName = projectLink.folderName ?? "Drive 폴더";
     }
 
-    // 1-b. 없으면 customer.name / project.name → KNOWN_PROJECT_GROUPS 자동 매핑
+    // 1-b. 없으면 discoverDriveFolderByProject (KNOWN_PROJECT_GROUPS + Drive 폴더 동적 탐색)
     if (!driveFolderId) {
-      const project = await prisma.project.findUnique({
-        where: { id: params.id },
-        include: { customer: { select: { name: true } } },
-      });
-
-      // 고객명과 프로젝트명 모두 매칭 시도
-      const searchNames = [
-        project?.customer?.name,
-        project?.name,
-      ].filter(Boolean) as string[];
-
-      for (const searchName of searchNames) {
-        if (driveFolderId) break;
-
-        // 정확 일치
-        const exactMatch = KNOWN_PROJECT_GROUPS[searchName];
-        if (exactMatch) {
-          driveFolderId = exactMatch;
-          folderName = searchName;
-          break;
-        }
-
-        // 부분 일치 (고객명이 "디티에스(주)", "DTS", "디티에스 xxxx" 같은 형태일 수 있음)
-        for (const [groupName, groupId] of Object.entries(KNOWN_PROJECT_GROUPS)) {
-          if (
-            searchName.includes(groupName) ||
-            groupName.includes(searchName) ||
-            searchName.toLowerCase().includes(groupName.toLowerCase())
-          ) {
-            driveFolderId = groupId;
-            folderName = groupName;
-            break;
-          }
-        }
+      const discovered = await discoverDriveFolderByProject(params.id);
+      if (discovered) {
+        driveFolderId = discovered.driveFolderId;
+        folderName = discovered.folderName;
       }
     }
 

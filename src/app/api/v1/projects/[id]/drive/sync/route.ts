@@ -19,6 +19,7 @@ import { fail, ok } from "@/lib/api-response";
 import { requireProjectAccess } from "@/lib/api-auth";
 import {
   syncDriveFolder,
+  syncDriveByProjectMapping,
   listSyncLogs,
   listDriveLinks,
 } from "@/services/drive-sync-service";
@@ -27,6 +28,7 @@ const syncSchema = z.object({
   linkId:      z.string().optional(),
   recursive:   z.boolean().optional().default(false),
   forceResync: z.boolean().optional().default(false),
+  stageNumber: z.number().int().min(1).max(10).optional(),
 });
 
 // ── POST — 동기화 실행 ────────────────────
@@ -47,7 +49,7 @@ export async function POST(
       );
     }
 
-    const { linkId, recursive, forceResync } = parsed.data;
+    const { linkId, recursive, forceResync, stageNumber } = parsed.data;
     const uploadedById = gate.session.user.id;
 
     // 특정 링크 또는 전체 링크 동기화
@@ -59,15 +61,45 @@ export async function POST(
       targetLinks = allLinks.map((l) => l.id);
     }
 
+    // 링크가 없으면 매핑 기반 자동 동기화 시도 (KNOWN_PROJECT_GROUPS)
     if (targetLinks.length === 0) {
-      return fail({ code: "NO_DRIVE_LINK", message: "연결된 Drive 폴더가 없습니다." }, 422);
+      try {
+        const result = await syncDriveByProjectMapping(params.id, uploadedById, {
+          recursive: true,
+          stageNumber,
+        });
+        return ok(
+          {
+            success: result.success,
+            skipped: result.skipped,
+            failed: result.failed,
+            results: [{ linkId: null, ...result }],
+          },
+          { status: 200 },
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return fail(
+          {
+            code: "NO_DRIVE_MAPPING",
+            message: message.includes("매핑이 없습니다")
+              ? message
+              : "고객명/프로젝트명에 해당하는 Drive 폴더 매핑이 없습니다. 매핑된 고객(삼성, 디티에스 등)만 자동 저장됩니다.",
+          },
+          422,
+        );
+      }
     }
 
     // 모든 링크 병렬 동기화
     const results = await Promise.all(
       targetLinks.map(async (id) => {
         try {
-          const result = await syncDriveFolder(id, uploadedById, { recursive, forceResync });
+          const result = await syncDriveFolder(id, uploadedById, {
+            recursive,
+            forceResync,
+            stageNumber,
+          });
           return { linkId: id, ...result };
         } catch (err) {
           return {

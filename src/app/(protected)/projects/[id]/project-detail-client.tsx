@@ -225,18 +225,26 @@ export function ProjectDetailClient({
     }
   }, [projectId, router, isRefreshing]);
 
-  // Drive 동기화 (시스템으로 저장)
-  const handleSync = useCallback(async (linkId?: string) => {
+  // Drive 동기화 (매핑된 문서 저장)
+  const handleSync = useCallback(async (linkId?: string, stageNumber?: number) => {
     setSyncing(true);
     try {
       const res = await fetch(`/api/v1/projects/${projectId}/drive/sync`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ recursive: true, ...(linkId ? { linkId } : {}) }),
+        body: JSON.stringify({
+          recursive: true,
+          ...(linkId ? { linkId } : {}),
+          ...(stageNumber ? { stageNumber } : {}),
+        }),
       });
       const payload = await res.json();
       if (!payload.success) {
-        toast.error(payload.error?.message ?? "동기화에 실패했습니다.");
+        const msg = payload.error?.message ?? "동기화에 실패했습니다.";
+        toast.error(msg);
+        if (payload.error?.code === "NO_DRIVE_MAPPING" || res.status === 422) {
+          setShowLinkForm(true);
+        }
         return;
       }
       const d = payload.data ?? {};
@@ -261,6 +269,14 @@ export function ProjectDetailClient({
       setSyncing(false);
     }
   }, [projectId, toast, fetchDriveFiles, fetchDriveLinks, refresh]);
+
+  // 단계별 매핑된 문서 저장
+  const handleSyncStage = useCallback(
+    async (stageNumber: number) => {
+      await handleSync(undefined, stageNumber);
+    },
+    [handleSync],
+  );
 
   return (
     <div className="space-y-3">
@@ -304,7 +320,7 @@ export function ProjectDetailClient({
                       disabled={syncing}
                       className="flex-shrink-0 rounded bg-indigo-600 px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-60 hover:bg-indigo-700"
                     >
-                      {syncing ? "저장 중..." : "시스템 저장"}
+                      {syncing ? "저장 중..." : "매핑된 문서 저장"}
                     </button>
                   </li>
                 ))}
@@ -317,7 +333,7 @@ export function ProjectDetailClient({
                   disabled={syncing}
                   className="w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60 hover:bg-indigo-700"
                 >
-                  {syncing ? "전체 시스템 저장 중..." : "전체 폴더 시스템으로 저장"}
+                  {syncing ? "저장 중..." : "전체 폴더 매핑된 문서 저장"}
                 </button>
               )}
             </div>
@@ -384,11 +400,38 @@ export function ProjectDetailClient({
             </button>
           )}
 
-          {driveLinks.length === 0 && !showLinkForm && (
-            <p className="text-xs text-slate-400">
-              연결 후 &quot;시스템으로 저장&quot;을 누르면 Drive 파일이 프로젝트 문서로 영구 저장됩니다.
-            </p>
-          )}
+          {/* 매핑된 문서 저장 — 고객명/프로젝트명으로 Drive 폴더 자동 매핑 (폴더 연결 불필요) */}
+          <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-200 mt-2 pt-3">
+            <button
+              type="button"
+              onClick={() =>
+                driveLinks.length === 1
+                  ? void handleSync(driveLinks[0]!.id)
+                  : void handleSync()
+              }
+              disabled={syncing}
+              title="고객명/프로젝트명으로 Drive 폴더를 자동 매핑하여 저장합니다"
+              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 hover:bg-indigo-700"
+            >
+              {syncing
+                ? "저장 중..."
+                : driveLinks.length === 1
+                  ? "매핑된 문서 저장"
+                  : driveLinks.length > 1
+                    ? "전체 폴더 매핑된 문서 저장"
+                    : "매핑된 문서 저장"}
+            </button>
+            {!showLinkForm && (
+              <div className="space-y-1">
+                <p className="text-xs text-slate-500">
+                  <strong>매핑된 문서 저장</strong> — 아래 각 단계에서도 단계별 저장 가능합니다.
+                </p>
+                <p className="text-xs text-slate-400">
+                  고객명/프로젝트명에 해당하는 Drive 폴더 매핑이 없으면 자동 저장되지 않습니다. 매핑된 고객(삼성, 디티에스 등)만 자동 저장됩니다. 매핑이 없으면 위 &quot;Drive 폴더 연결&quot;로 수동 연결해 주세요.
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -428,6 +471,8 @@ export function ProjectDetailClient({
             driveFiles={driveFiles[String(stage.stageNumber)] ?? []}
             driveLoading={driveLoading}
             docsRefreshTrigger={docsRefreshTrigger}
+            onSyncStage={canManage ? handleSyncStage : undefined}
+            syncing={syncing}
           />
         ))}
       </div>

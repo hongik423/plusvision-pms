@@ -1,9 +1,29 @@
+import dynamic from "next/dynamic";
 import { fetchAllDashboardData } from "@/services/dashboard-service";
 import { requireSession } from "@/lib/rbac";
 import Link from "next/link";
-import { StageDistributionChart } from "@/components/dashboard/stage-distribution-chart";
-import { MonthlyPerformanceChart } from "@/components/dashboard/monthly-performance-chart";
-import { AssigneeWorkloadChart } from "@/components/dashboard/assignee-workload-chart";
+
+/** Recharts ResponsiveContainer는 SSR 시 undefined.call 오류 발생 → 클라이언트에서만 로드 */
+const chartLoading = (minH: string) => (
+  <div className={`flex min-h-[${minH}] items-center justify-center rounded-lg bg-slate-50`}>
+    <span className="text-sm text-slate-400">차트 로딩 중...</span>
+  </div>
+);
+
+const StageDistributionChart = dynamic(
+  () => import("@/components/dashboard/stage-distribution-chart").then((m) => m.StageDistributionChart),
+  { ssr: false, loading: () => chartLoading("280px") }
+);
+
+const MonthlyPerformanceChart = dynamic(
+  () => import("@/components/dashboard/monthly-performance-chart").then((m) => m.MonthlyPerformanceChart),
+  { ssr: false, loading: () => chartLoading("240px") }
+);
+
+const AssigneeWorkloadChart = dynamic(
+  () => import("@/components/dashboard/assignee-workload-chart").then((m) => m.AssigneeWorkloadChart),
+  { ssr: false, loading: () => chartLoading("200px") }
+);
 
 export default async function DashboardPage({
   searchParams,

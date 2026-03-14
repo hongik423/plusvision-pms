@@ -19,7 +19,6 @@ export default function RootLayout({
         {/* Pretendard 가변 폰트 — 한국어 다이나믹 서브셋 (jsDelivr CDN) */}
         <link
           rel="stylesheet"
-          as="style"
           crossOrigin="anonymous"
           href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
         />

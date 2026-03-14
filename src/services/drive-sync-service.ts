@@ -24,10 +24,74 @@ import {
   getExportInfo,
   type DriveFileDescriptor,
 } from "@/scripts/migration/google-drive-adapter";
+import { KNOWN_PROJECT_GROUPS, DRIVE_ROOT_PROJECTS } from "@/lib/drive-config";
 import type { DocumentType } from "@prisma/client";
 import { createNotification } from "@/services/notification-service";
 
 const BUCKET = "projects";
+
+// ──────────────────────────────────────────
+// 프로젝트 → Drive 폴더 자동 매핑 (고객명/프로젝트명 → KNOWN_PROJECT_GROUPS)
+// ──────────────────────────────────────────
+export async function discoverDriveFolderByProject(projectId: string): Promise<{
+  driveFolderId: string;
+  folderName: string;
+} | null> {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: { customer: { select: { name: true } } },
+  });
+  if (!project) return null;
+
+  const searchNames = [project.customer?.name, project.name].filter(Boolean) as string[];
+
+  for (const searchName of searchNames) {
+    const exactMatch = KNOWN_PROJECT_GROUPS[searchName];
+    if (exactMatch) return { driveFolderId: exactMatch, folderName: searchName };
+
+    for (const [groupName, groupId] of Object.entries(KNOWN_PROJECT_GROUPS)) {
+      if (
+        searchName.includes(groupName) ||
+        groupName.includes(searchName) ||
+        searchName.toLowerCase().includes(groupName.toLowerCase())
+      ) {
+        return { driveFolderId: groupId, folderName: groupName };
+      }
+    }
+  }
+
+  // KNOWN_PROJECT_GROUPS 매핑 실패 시 Drive 프로젝트 루트에서 폴더 동적 탐색
+  if (searchNames.length === 0) return null;
+  try {
+    const adapter = createGoogleDriveAdapter();
+    const items = await adapter.listFiles(DRIVE_ROOT_PROJECTS);
+    const folders = items.filter((f) => f.mimeType === "application/vnd.google-apps.folder");
+
+    const matches = (folderName: string): boolean =>
+      searchNames.some((s) => {
+        const a = s.toLowerCase().trim();
+        const b = folderName.toLowerCase().trim();
+        return a && b && (a.includes(b) || b.includes(a));
+      });
+
+    for (const folder of folders) {
+      if (matches(folder.name)) return { driveFolderId: folder.id, folderName: folder.name };
+    }
+    // "거래 업체", "사람별 프로젝트" 하위 폴더도 검색
+    for (const folder of folders) {
+      if (folder.name === "거래 업체" || folder.name === "사람별 프로젝트") {
+        const subItems = await adapter.listFiles(folder.id);
+        const subFolders = subItems.filter((f) => f.mimeType === "application/vnd.google-apps.folder");
+        for (const sub of subFolders) {
+          if (matches(sub.name)) return { driveFolderId: sub.id, folderName: sub.name };
+        }
+      }
+    }
+  } catch {
+    // Drive 미연동 또는 API 오류 시 null 반환 (수동 연결 필요)
+  }
+  return null;
+}
 
 // ──────────────────────────────────────────
 // 파일명/경로 기반 문서 유형·단계 자동 분류
@@ -131,6 +195,30 @@ export async function listDriveLinks(projectId: string): Promise<ProjectDriveLin
 }
 
 // ──────────────────────────────────────────
+// 3-b. 매핑 기반 자동 동기화 (폴더 연결 없이 KNOWN_PROJECT_GROUPS로 자동 탐지)
+// ──────────────────────────────────────────
+export async function syncDriveByProjectMapping(
+  projectId: string,
+  uploadedById: string,
+  options: { recursive?: boolean; stageNumber?: number } = {},
+): Promise<SyncResult> {
+  const discovered = await discoverDriveFolderByProject(projectId);
+  if (!discovered) {
+    throw new Error("고객명/프로젝트명에 해당하는 Drive 폴더 매핑이 없습니다.");
+  }
+  const link = await linkDriveFolder({
+    projectId:     projectId,
+    driveFolderId: discovered.driveFolderId,
+    folderName:    discovered.folderName,
+    userId:        uploadedById,
+  });
+  return syncDriveFolder(link.id, uploadedById, {
+    recursive:   options.recursive ?? true,
+    stageNumber: options.stageNumber,
+  });
+}
+
+// ──────────────────────────────────────────
 // 4. Drive 폴더의 실시간 파일 목록 조회
 // ──────────────────────────────────────────
 export type DriveFileSyncStatus = DriveFileDescriptor & {
@@ -192,7 +280,7 @@ export type SyncResult = {
 export async function syncDriveFolder(
   linkId: string,
   uploadedById: string,
-  options: { recursive?: boolean; forceResync?: boolean } = {},
+  options: { recursive?: boolean; forceResync?: boolean; stageNumber?: number } = {},
 ): Promise<SyncResult> {
   const link = await prismaDrive.driveLink.findUnique({ where: { id: linkId } });
   if (!link || !link.isActive) throw new Error("연결된 Drive 폴더를 찾을 수 없습니다.");
@@ -224,14 +312,22 @@ export async function syncDriveFolder(
 
   const result: SyncResult = { success: 0, skipped: 0, failed: 0, logs: [] };
 
+  const filterStage = options.stageNumber;
+
   for (const file of files) {
+    const classified = classifyFile(file.name, file.relativePath, link.stageNumber);
+
+    // 단계 필터: 해당 단계에 매핑된 파일만 처리
+    if (filterStage != null && classified.stageNumber !== filterStage) {
+      continue;
+    }
+
     if (alreadySynced.has(file.id)) {
       result.skipped++;
       result.logs.push({ fileName: file.name, status: "SKIPPED", reason: "이미 동기화됨" });
       continue;
     }
 
-    const classified = classifyFile(file.name, file.relativePath, link.stageNumber);
     const stageId = stageIdByNumber.get(classified.stageNumber);
 
     if (!stageId) {
