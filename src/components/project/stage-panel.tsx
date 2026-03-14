@@ -134,8 +134,24 @@ export function StagePanel({
   const canComplete = (canManage || isAssignee) && stage.status === "ACTIVE";
   const canAssign = canManage;
 
-  // 전체 문서 수 (DB + Drive)
-  const totalDocCount = docs.length + driveFiles.length;
+  // ── 동기화된 Drive 파일은 "시스템 문서"에 이미 있으므로 Drive 섹션에서 제외 ──
+  // DB 문서 중 storageType=GOOGLE_DRIVE인 파일명 Set
+  const syncedFileNames = new Set(
+    docs
+      .filter((d) => d.storageType === "GOOGLE_DRIVE")
+      .map((d) => d.fileName),
+  );
+  // Drive 파일 중 아직 DB에 없는 것만 (미동기화)
+  const unsyncedDriveFiles = driveFiles.filter(
+    (f) => !syncedFileNames.has(f.fileName),
+  );
+  // DB 문서 중 Drive에서 가져온 것 (storageType=GOOGLE_DRIVE)
+  const syncedDriveDocs = docs.filter((d) => d.storageType === "GOOGLE_DRIVE");
+  // DB 문서 중 직접 업로드한 것
+  const uploadedDocs = docs.filter((d) => d.storageType !== "GOOGLE_DRIVE");
+
+  // 전체 문서 수 (DB + 미동기화 Drive)
+  const totalDocCount = docs.length + unsyncedDriveFiles.length;
 
   const statusBg =
     stage.status === "COMPLETED"
@@ -238,15 +254,17 @@ export function StagePanel({
             </div>
           )}
 
-          {/* ── Google Drive 문서 (실시간 조회) ──────────────── */}
-          {(driveFiles.length > 0 || driveLoading) && (
+          {/* ── Google Drive 문서 (미동기화 파일만 표시) ──────────────── */}
+          {(unsyncedDriveFiles.length > 0 || driveLoading) && (
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-xs font-semibold text-green-700 flex items-center gap-1">
-                  <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
-                  Google Drive 문서
+                <span className="text-xs font-semibold text-amber-700 flex items-center gap-1">
+                  <span className="inline-block h-2 w-2 rounded-full bg-amber-400" />
+                  Drive 미동기화 파일
                 </span>
-                <span className="text-[10px] text-slate-400">({driveFiles.length}건)</span>
+                {!driveLoading && (
+                  <span className="text-[10px] text-slate-400">({unsyncedDriveFiles.length}건 — 시스템 저장 후 영구 보관)</span>
+                )}
               </div>
 
               {driveLoading ? (
@@ -256,10 +274,10 @@ export function StagePanel({
                 </div>
               ) : (
                 <ul className="space-y-1.5">
-                  {driveFiles.map((file) => (
+                  {unsyncedDriveFiles.map((file) => (
                     <li
                       key={file.id}
-                      className="flex items-center gap-2.5 rounded-lg border border-green-100 bg-white px-3 py-2 hover:bg-green-50 transition-colors"
+                      className="flex items-center gap-2.5 rounded-lg border border-amber-100 bg-amber-50/50 px-3 py-2 hover:bg-amber-50 transition-colors"
                     >
                       <span className="text-lg flex-shrink-0">
                         {getFileIcon(file.fileName, file.mimeType)}
@@ -269,12 +287,15 @@ export function StagePanel({
                           href={file.fileUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-xs font-semibold text-slate-700 hover:text-green-600 hover:underline truncate block"
+                          className="text-xs font-semibold text-slate-700 hover:text-amber-700 hover:underline truncate block"
                           title={file.relativePath ? `경로: ${file.relativePath}/${file.fileName}` : file.fileName}
                         >
                           {file.fileName}
                         </a>
                         <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-400">
+                          <span className="rounded bg-amber-100 px-1 py-0.5 text-amber-700 font-medium">
+                            미동기화
+                          </span>
                           <span className="rounded bg-green-100 px-1 py-0.5 text-green-700 font-medium">
                             Drive
                           </span>
@@ -287,16 +308,14 @@ export function StagePanel({
                             </span>
                           )}
                           <span>{formatBytes(file.fileSize)}</span>
-                          {file.modifiedTime && (
-                            <span>{formatDate(file.modifiedTime)}</span>
-                          )}
+                          {file.modifiedTime && <span>{formatDate(file.modifiedTime)}</span>}
                         </div>
                       </div>
                       <a
                         href={file.fileUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="flex-shrink-0 rounded border border-green-300 bg-green-50 px-2 py-1 text-[10px] font-medium text-green-700 hover:bg-green-100"
+                        className="flex-shrink-0 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100"
                       >
                         열기
                       </a>
@@ -307,7 +326,7 @@ export function StagePanel({
             </div>
           )}
 
-          {/* ── DB 문서 (Supabase 동기화 완료) ──────────────── */}
+          {/* ── 시스템 문서 (직접 업로드 + Drive 동기화 완료) ──────────────── */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
@@ -315,7 +334,12 @@ export function StagePanel({
                   <span className="inline-block h-2 w-2 rounded-full bg-blue-500" />
                   시스템 문서
                 </span>
-                {docs.length > 0 && <span className="text-[10px] text-slate-400">({docs.length}건)</span>}
+                {docs.length > 0 && (
+                  <span className="text-[10px] text-slate-400">
+                    ({docs.length}건
+                    {syncedDriveDocs.length > 0 && ` — Drive 동기화 ${syncedDriveDocs.length}건 포함`})
+                  </span>
+                )}
               </div>
               {docsFetched && (
                 <button
@@ -333,20 +357,19 @@ export function StagePanel({
                 <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-blue-500" />
                 문서 조회 중...
               </div>
-            ) : docs.length === 0 && driveFiles.length === 0 ? (
+            ) : docs.length === 0 && unsyncedDriveFiles.length === 0 ? (
               <div className="rounded border border-dashed bg-white py-4 text-center text-xs text-slate-400">
                 등록된 문서가 없습니다
               </div>
             ) : docs.length === 0 ? null : (
               <ul className="space-y-1.5">
-                {docs.map((doc) => (
+                {/* 직접 업로드 파일 먼저 표시 */}
+                {uploadedDocs.map((doc) => (
                   <li
                     key={doc.id}
                     className="flex items-center gap-2.5 rounded-lg border bg-white px-3 py-2 hover:bg-blue-50 transition-colors"
                   >
-                    <span className="text-lg flex-shrink-0">
-                      {getFileIcon(doc.fileName, doc.mimeType)}
-                    </span>
+                    <span className="text-lg flex-shrink-0">{getFileIcon(doc.fileName, doc.mimeType)}</span>
                     <div className="flex-1 min-w-0">
                       <a
                         href={doc.fileUrl}
@@ -360,22 +383,45 @@ export function StagePanel({
                         <span className="rounded bg-blue-100 px-1 py-0.5 text-blue-700">
                           {DOCUMENT_TYPE_LABELS[doc.documentType as keyof typeof DOCUMENT_TYPE_LABELS] ?? doc.documentType}
                         </span>
-                        <span className="rounded bg-indigo-100 px-1 py-0.5 text-indigo-700 font-bold">
-                          v{doc.version}
-                        </span>
-                        {doc.storageType === "GOOGLE_DRIVE" && (
-                          <span className="rounded bg-green-100 px-1 py-0.5 text-green-700">Drive</span>
-                        )}
+                        <span className="rounded bg-indigo-100 px-1 py-0.5 text-indigo-700 font-bold">v{doc.version}</span>
                         <span>{formatBytes(doc.fileSize)}</span>
                         <span>{new Date(doc.createdAt).toLocaleDateString("ko-KR")}</span>
                       </div>
                     </div>
-                    <a
-                      href={doc.fileUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex-shrink-0 rounded border px-2 py-1 text-[10px] font-medium hover:bg-slate-100"
-                    >
+                    <a href={doc.fileUrl} target="_blank" rel="noreferrer"
+                      className="flex-shrink-0 rounded border px-2 py-1 text-[10px] font-medium hover:bg-slate-100">
+                      열기
+                    </a>
+                  </li>
+                ))}
+                {/* Drive 동기화 완료 파일 */}
+                {syncedDriveDocs.map((doc) => (
+                  <li
+                    key={doc.id}
+                    className="flex items-center gap-2.5 rounded-lg border border-green-100 bg-white px-3 py-2 hover:bg-green-50 transition-colors"
+                  >
+                    <span className="text-lg flex-shrink-0">{getFileIcon(doc.fileName, doc.mimeType)}</span>
+                    <div className="flex-1 min-w-0">
+                      <a
+                        href={doc.fileUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs font-semibold text-slate-700 hover:text-green-700 hover:underline truncate block"
+                      >
+                        {doc.fileName}
+                      </a>
+                      <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-400">
+                        <span className="rounded bg-green-100 px-1 py-0.5 text-green-700 font-semibold">Drive ✓</span>
+                        <span className="rounded bg-blue-100 px-1 py-0.5 text-blue-700">
+                          {DOCUMENT_TYPE_LABELS[doc.documentType as keyof typeof DOCUMENT_TYPE_LABELS] ?? doc.documentType}
+                        </span>
+                        <span className="rounded bg-indigo-100 px-1 py-0.5 text-indigo-700 font-bold">v{doc.version}</span>
+                        <span>{formatBytes(doc.fileSize)}</span>
+                        <span>{new Date(doc.createdAt).toLocaleDateString("ko-KR")}</span>
+                      </div>
+                    </div>
+                    <a href={doc.fileUrl} target="_blank" rel="noreferrer"
+                      className="flex-shrink-0 rounded border border-green-300 bg-green-50 px-2 py-1 text-[10px] font-medium text-green-700 hover:bg-green-100">
                       열기
                     </a>
                   </li>
