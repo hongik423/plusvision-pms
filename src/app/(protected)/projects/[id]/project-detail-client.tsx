@@ -386,7 +386,7 @@ export function ProjectDetailClient({
 
           {driveLinks.length === 0 && !showLinkForm && (
             <p className="text-xs text-slate-400">
-              연결 후 "시스템으로 저장"을 누르면 Drive 파일이 프로젝트 문서로 영구 저장됩니다.
+              연결 후 &quot;시스템으로 저장&quot;을 누르면 Drive 파일이 프로젝트 문서로 영구 저장됩니다.
             </p>
           )}
         </div>
