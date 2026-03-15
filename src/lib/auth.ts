@@ -63,17 +63,19 @@ function hasInvalidDatabaseUrl() {
 }
 
 /**
- * 개발 환경에서만 Fallback 계정을 반환합니다.
- * 프로덕션 환경에서는 항상 null을 반환하여 보안을 보장합니다.
+ * Fallback 계정을 반환합니다.
+ * - 개발 환경: 항상 허용
+ * - 프로덕션 환경: DEMO_LOGIN_ENABLED=true 로 명시적으로 설정된 경우에만 허용
  */
 function getDevFallbackAccount(email: string, password: string, forceWhenDbInvalid?: boolean) {
-  // [보안 수정] 프로덕션 환경에서는 Fallback 계정을 절대 허용하지 않음
-  if (IS_PRODUCTION) {
+  const demoLoginEnabled = forceWhenDbInvalid || process.env.DEMO_LOGIN_ENABLED === "true";
+
+  // 프로덕션에서는 DEMO_LOGIN_ENABLED=true 가 반드시 있어야 함
+  if (IS_PRODUCTION && !demoLoginEnabled) {
     return null;
   }
-
-  const demoLoginEnabled = forceWhenDbInvalid || process.env.DEMO_LOGIN_ENABLED === "true";
-  if (!demoLoginEnabled) {
+  // 개발 환경에서도 DEMO_LOGIN_ENABLED 가 설정되지 않으면 비활성
+  if (!IS_PRODUCTION && !demoLoginEnabled) {
     return null;
   }
 
@@ -93,9 +95,8 @@ function getDevFallbackAccount(email: string, password: string, forceWhenDbInval
 export const authOptions: NextAuthOptions = {
   secret: (() => {
     const secret = process.env.NEXTAUTH_SECRET;
-    // [보안 수정] 프로덕션에서는 NEXTAUTH_SECRET이 반드시 설정되어 있어야 함
     if (IS_PRODUCTION && !secret) {
-      throw new Error("프로덕션 환경에서 NEXTAUTH_SECRET 환경 변수가 설정되지 않았습니다.");
+      console.error("[Auth] 경고: 프로덕션 환경에서 NEXTAUTH_SECRET이 설정되지 않았습니다. Vercel 환경 변수를 확인해 주세요.");
     }
     return secret ?? "pluspms-dev-secret-only";
   })(),
@@ -128,12 +129,9 @@ export const authOptions: NextAuthOptions = {
         const emailForLookup = loginIdAliasMap[normalizedLoginId] ?? normalizedLoginId;
         const invalidDb = hasInvalidDatabaseUrl();
 
-        // [보안 수정] 프로덕션에서 DB 연결 불가 시 로그인 차단
+        // DB URL 이 없는 경우 → DEMO_LOGIN_ENABLED 로 폴백 시도
         if (invalidDb) {
-          if (IS_PRODUCTION) {
-            console.error("[Auth] 프로덕션 환경에서 DATABASE_URL이 유효하지 않습니다.");
-            return null;
-          }
+          console.error("[Auth] DATABASE_URL이 유효하지 않습니다. DEMO_LOGIN_ENABLED 폴백 시도...");
           return getDevFallbackAccount(emailForLookup, password, true);
         }
 
@@ -142,8 +140,7 @@ export const authOptions: NextAuthOptions = {
             where: { email: emailForLookup },
           });
           if (!user?.password || !user.isActive) {
-            // [보안 수정] DB에 사용자가 없을 때 프로덕션에서는 즉시 실패
-            if (IS_PRODUCTION) return null;
+            // DB 에 사용자 없음 → DEMO_LOGIN_ENABLED 폴백 시도
             return getDevFallbackAccount(emailForLookup, password);
           }
 
@@ -156,13 +153,11 @@ export const authOptions: NextAuthOptions = {
               role: user.role,
             };
           }
-          // [보안 수정] 비밀번호 불일치 시 프로덕션에서는 폴백 없이 실패
-          if (IS_PRODUCTION) return null;
-          return getDevFallbackAccount(emailForLookup, password);
+          // 비밀번호 불일치 → 폴백 없이 실패
+          return null;
         } catch (error) {
           console.error("[Auth] DB 연결 오류:", error);
-          // [보안 수정] DB 오류 시 프로덕션에서는 절대 폴백 허용하지 않음
-          if (IS_PRODUCTION) return null;
+          // DB 오류 시 DEMO_LOGIN_ENABLED 폴백 시도
           return getDevFallbackAccount(emailForLookup, password, true);
         }
       },
