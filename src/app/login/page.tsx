@@ -37,7 +37,7 @@ export default function LoginPage() {
       <form onSubmit={onSubmit} className="w-full max-w-md rounded-xl border bg-white p-6 shadow-sm">
         <h1 className="mb-6 text-2xl font-bold">PlusPMS 로그인</h1>
         <p className="mb-4 text-sm text-slate-500">
-          테스트 계정: admin/admin, manager/manager, test/test
+          테스트 계정: admin / PlusPms1!Adm, manager / PlusPms1!Mgr, test / PlusPms1!Tst
         </p>
         <div className="space-y-2">
           <label className="text-sm font-semibold">아이디</label>

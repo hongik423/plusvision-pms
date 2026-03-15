@@ -16,27 +16,28 @@ type DevFallbackUser = {
   password: string;
 };
 
+// 브라우저 비밀번호 유출 경고 회피: 프로젝트 전용 비밀번호 사용 (admin/manager/test는 breach DB에 등재됨)
 const devFallbackUsers: Record<string, DevFallbackUser> = {
   "admin@plusvision.co.kr": {
     id: "dev-admin",
     email: "admin@plusvision.co.kr",
     name: "개발 관리자",
     role: "ADMIN",
-    password: "admin",
+    password: "PlusPms1!Adm",
   },
   "manager@plusvision.co.kr": {
     id: "dev-manager",
     email: "manager@plusvision.co.kr",
     name: "개발 매니저",
     role: "MANAGER",
-    password: "manager",
+    password: "PlusPms1!Mgr",
   },
   "test@plusvision.co.kr": {
     id: "dev-user",
     email: "test@plusvision.co.kr",
     name: "개발 사용자",
     role: "USER",
-    password: "test",
+    password: "PlusPms1!Tst",
   },
 };
 

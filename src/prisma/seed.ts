@@ -38,8 +38,8 @@ async function main() {
 
   console.log('🌱 시드 데이터 생성 시작...');
 
-  // 1. 관리자 계정 생성
-  const adminPassword = await hash('admin', 12);
+  // 1. 관리자 계정 생성 (비밀번호: 브라우저 유출 경고 회피용 프로젝트 전용 형식)
+  const adminPassword = await hash('PlusPms1!Adm', 12);
   const admin = await prisma.user.upsert({
     where: { email: 'admin@plusvision.co.kr' },
     update: {
@@ -58,10 +58,10 @@ async function main() {
   });
   console.log('✅ 관리자 계정 생성:', admin.email);
 
-  // 2. 테스트 사용자 생성
-  const managerPassword = await hash('manager', 12);
-  const testPassword = await hash('test', 12);
-  const commonUserPassword = await hash('test1234!', 12);
+  // 2. 테스트 사용자 생성 (브라우저 유출 경고 회피용 프로젝트 전용 비밀번호)
+  const managerPassword = await hash('PlusPms1!Mgr', 12);
+  const testPassword = await hash('PlusPms1!Tst', 12);
+  const commonUserPassword = await hash('PlusPms1!Eng', 12);
   const testUsers = [
     {
       email: 'manager@plusvision.co.kr',
