@@ -13,10 +13,14 @@ export default function LoginPage() {
     event.preventDefault();
     setError("");
     setLoading(true);
+    const params = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
+    const callbackUrl = params.get("callbackUrl") ?? "/dashboard";
+
     const result = await signIn("credentials", {
       loginId,
       password,
       redirect: false,
+      callbackUrl,
     });
     setLoading(false);
     if (result?.error) {
@@ -27,9 +31,12 @@ export default function LoginPage() {
       }
       return;
     }
-    const params = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
-    const callbackUrl = params.get("callbackUrl") ?? "/dashboard";
-    window.location.href = result?.url ?? callbackUrl;
+    const callbackPath = callbackUrl.startsWith("/") ? callbackUrl : `/${callbackUrl}`;
+    // NEXTAUTH_URL 오설정 시 외부 도메인으로 리다이렉트 방지
+    const targetUrl = result?.url;
+    const isSameOrigin =
+      targetUrl && typeof window !== "undefined" && new URL(targetUrl, window.location.origin).origin === window.location.origin;
+    window.location.href = isSameOrigin ? targetUrl : `${window.location.origin}${callbackPath}`;
   }
 
   return (

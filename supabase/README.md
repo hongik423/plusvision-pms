@@ -135,6 +135,20 @@ NEXTAUTH_URL=https://plusvision-pms.vercel.app
 NEXTAUTH_SECRET=<32자 이상 랜덤 문자열>
 ```
 
+### Vercel 배포 시 필수 환경 변수
+
+Vercel 대시보드 → 프로젝트 → **Settings** → **Environment Variables** 에서 설정:
+
+| 변수 | 필수 | 설명 |
+|------|------|------|
+| `NEXTAUTH_URL` | ✅ | 배포 URL (예: `https://plusvision-pms.vercel.app`) |
+| `NEXTAUTH_SECRET` | ✅ | `openssl rand -base64 32`로 생성한 32자 이상 문자열 |
+| `DATABASE_URL` | ✅ | Supabase Connection String (Transaction pooler 6543 권장) |
+| `DEMO_LOGIN_ENABLED` | - | DB 사용자 없을 때 `true`면 테스트 계정 허용. **Vercel 배포는 자동 허용** |
+
+- **Vercel 배포**에서는 `VERCEL=1`이 자동 설정되어, DB에 사용자가 없거나 연결 실패 시 데모 계정(admin/manager/test)으로 로그인 가능합니다.
+- 로그인 실패 시: `NEXTAUTH_URL`, `NEXTAUTH_SECRET` 값과 DB 연결을 확인하세요.
+
 ---
 
 ## 시드 데이터 재생성

@@ -64,17 +64,21 @@ function hasInvalidDatabaseUrl() {
 
 /**
  * Fallback 계정을 반환합니다.
- * - 개발 환경: 항상 허용
- * - 프로덕션 환경: DEMO_LOGIN_ENABLED=true 로 명시적으로 설정된 경우에만 허용
+ * - 개발 환경: DEMO_LOGIN_ENABLED=true 시 허용
+ * - 프로덕션 환경: DEMO_LOGIN_ENABLED=true 또는 Vercel 배포 시 허용 (데모 사이트용)
  */
 function getDevFallbackAccount(email: string, password: string, forceWhenDbInvalid?: boolean) {
-  const demoLoginEnabled = forceWhenDbInvalid || process.env.DEMO_LOGIN_ENABLED === "true";
+  const isVercel = process.env.VERCEL === "1";
+  const demoLoginEnabled =
+    forceWhenDbInvalid ||
+    process.env.DEMO_LOGIN_ENABLED === "true" ||
+    (IS_PRODUCTION && isVercel);
 
-  // 프로덕션에서는 DEMO_LOGIN_ENABLED=true 가 반드시 있어야 함
+  // 프로덕션에서는 demoLoginEnabled 또는 Vercel 배포여야 함
   if (IS_PRODUCTION && !demoLoginEnabled) {
     return null;
   }
-  // 개발 환경에서도 DEMO_LOGIN_ENABLED 가 설정되지 않으면 비활성
+  // 개발 환경에서는 DEMO_LOGIN_ENABLED가 설정되어야 함
   if (!IS_PRODUCTION && !demoLoginEnabled) {
     return null;
   }
@@ -184,6 +188,16 @@ export const authOptions: NextAuthOptions = {
         session.user.role = (token.role as string) ?? "USER";
       }
       return session;
+    },
+    async redirect({ url, baseUrl }) {
+      // 상대 경로면 baseUrl 기반으로 절대 URL 반환 (Vercel 리다이렉트 안정화)
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      try {
+        if (new URL(url).origin === new URL(baseUrl).origin) return url;
+      } catch {
+        // 잘못된 URL이면 baseUrl로 폴백
+      }
+      return baseUrl;
     },
   },
   pages: {
