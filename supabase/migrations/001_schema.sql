@@ -1,6 +1,6 @@
 -- ============================================================
 -- PlusPMS Supabase 스키마 마이그레이션
--- 실행 순서: 001_schema.sql → 002_rls.sql → 003_storage.sql
+-- 실행 순서: 001_schema.sql → 002_rls.sql → 003_storage.sql → 004_drive_sync.sql → 005_enable_rls_public.sql
 -- Supabase SQL 에디터에서 전체 붙여넣기 후 Run
 -- ============================================================
 
