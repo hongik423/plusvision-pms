@@ -1,6 +1,14 @@
 "use client";
 
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 type Site = {
   id: string;
@@ -58,6 +66,11 @@ export function MasterCrudPanel() {
   const [activeTab, setActiveTab] = useState<TabKey>("sites");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<Record<string, unknown> & { id: string } | null>(null);
+  const [editingFields, setEditingFields] = useState<Array<{ key: string; label: string; type?: string }>>([]);
+  const [editingEndpoint, setEditingEndpoint] = useState("");
+  const [editFormData, setEditFormData] = useState<Record<string, string>>({});
   const [data, setData] = useState<MasterPayload>({
     sites: [],
     processTypes: [],
@@ -169,10 +182,6 @@ export function MasterCrudPanel() {
     return true;
   }
 
-  async function toggleActive(endpoint: string, row: { id: string; isActive: boolean }) {
-    await updateRecord(endpoint, { id: row.id, isActive: !row.isActive });
-  }
-
   async function onCreateSite(event: FormEvent) {
     event.preventDefault();
     const ok = await createRecord("/api/v1/master/sites", {
@@ -239,18 +248,53 @@ export function MasterCrudPanel() {
   async function promptAndUpdate(
     endpoint: string,
     row: Record<string, unknown> & { id: string },
-    fieldPrompts: Array<{ key: string; label: string }>,
+    fieldPrompts: Array<{ key: string; label: string; type?: string }>,
   ) {
-    const patch: Record<string, unknown> = { id: row.id };
-    for (const field of fieldPrompts) {
-      const before = row[field.key];
-      const input = window.prompt(`${field.label} 수정`, before == null ? "" : String(before));
-      if (input === null) {
-        return;
+    setEditingItem(row);
+    setEditingFields(fieldPrompts);
+    setEditingEndpoint(endpoint);
+    setEditFormData(
+      fieldPrompts.reduce((acc, field) => {
+        acc[field.key] = row[field.key] == null ? "" : String(row[field.key]);
+        return acc;
+      }, {} as Record<string, string>)
+    );
+    setEditModalOpen(true);
+  }
+
+  async function handleEditSave() {
+    if (!editingItem) return;
+    
+    const patch: Record<string, unknown> = { id: editingItem.id };
+    for (const field of editingFields) {
+      const value = editFormData[field.key];
+      if (field.type === "number") {
+        patch[field.key] = value === "" ? null : Number(value);
+      } else {
+        patch[field.key] = value;
       }
-      patch[field.key] = input;
     }
-    await updateRecord(endpoint, patch);
+    
+    const success = await updateRecord(editingEndpoint, patch);
+    if (success) {
+      setEditModalOpen(false);
+      setEditingItem(null);
+      setEditingFields([]);
+      setEditingEndpoint("");
+      setEditFormData({});
+    }
+  }
+
+  async function handleEditCancel() {
+    setEditModalOpen(false);
+    setEditingItem(null);
+    setEditingFields([]);
+    setEditingEndpoint("");
+    setEditFormData({});
+  }
+
+  async function toggleActive(endpoint: string, row: { id: string; isActive: boolean }) {
+    await updateRecord(endpoint, { id: row.id, isActive: !row.isActive });
   }
 
   return (
@@ -586,7 +630,7 @@ export function MasterCrudPanel() {
                           { key: "name", label: "이름" },
                           { key: "specification", label: "사양" },
                           { key: "unit", label: "단위" },
-                          { key: "unitPrice", label: "단가" },
+                          { key: "unitPrice", label: "단가", type: "number" },
                           { key: "manufacturer", label: "제조사" },
                         ])
                       }
@@ -608,6 +652,53 @@ export function MasterCrudPanel() {
           />
         </div>
       ) : null}
+
+      {/* 수정 모달 */}
+      <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>데이터 수정</DialogTitle>
+            <DialogDescription>
+              수정할 내용을 입력하고 저장 버튼을 클릭하세요.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {editingFields.map((field) => (
+              <div key={field.key} className="space-y-2">
+                <label className="text-sm font-medium">{field.label}</label>
+                <input
+                  type={field.type === "number" ? "number" : "text"}
+                  className="w-full rounded border px-3 py-2"
+                  value={editFormData[field.key] || ""}
+                  onChange={(e) =>
+                    setEditFormData((prev) => ({
+                      ...prev,
+                      [field.key]: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <button
+              type="button"
+              className="rounded border px-4 py-2 text-sm"
+              onClick={handleEditCancel}
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              className="rounded bg-blue-600 px-4 py-2 text-sm text-white disabled:opacity-60"
+              onClick={handleEditSave}
+              disabled={saving}
+            >
+              {saving ? "저장 중..." : "저장"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

@@ -14,6 +14,7 @@ type StageData = {
   assigneeId: string | null;
   assignee: { id: string; name: string } | null;
   startDate: string | null;
+  dueDate: string | null;
   completedDate: string | null;
   notes: string | null;
 };
@@ -81,6 +82,39 @@ function getFileIcon(fileName: string, mimeType: string) {
   return "📎";
 }
 
+function renderStageTrafficLight(stage: StageData) {
+  const due = stage.dueDate ? new Date(stage.dueDate) : null;
+  if (due) due.setHours(0, 0, 0, 0);
+
+  let isRed = false;
+  let isYellow = false;
+  let isGreen = false;
+
+  if (due && stage.status === "COMPLETED" && stage.completedDate) {
+    const completed = new Date(stage.completedDate);
+    completed.setHours(0, 0, 0, 0);
+    const diff = Math.round((completed.getTime() - due.getTime()) / (1000 * 60 * 60 * 24));
+    isRed = diff >= 5;
+    isYellow = diff > 0 && diff < 5;
+    isGreen = diff <= 0;
+  } else if (due && stage.status !== "SKIPPED") {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diff = Math.round((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    isRed = diff <= -3;
+    isYellow = diff >= -2 && diff <= 1;
+    isGreen = diff >= 2;
+  }
+
+  return (
+    <span className="flex items-center gap-2.5 px-3.5 py-2 rounded-2xl border-2 border-gray-700 bg-gray-900 text-white shadow-sm">
+      <span className={`inline-block h-6 w-6 rounded-full ${isRed ? "bg-red-500 shadow-[0_0_10px_4px_rgba(239,68,68,0.8)]" : "bg-gray-700"}`} />
+      <span className={`inline-block h-6 w-6 rounded-full ${isYellow ? "bg-yellow-400 shadow-[0_0_10px_4px_rgba(250,204,21,0.8)]" : "bg-gray-700"}`} />
+      <span className={`inline-block h-6 w-6 rounded-full ${isGreen ? "bg-green-500 shadow-[0_0_10px_4px_rgba(34,197,94,0.8)]" : "bg-gray-700"}`} />
+    </span>
+  );
+}
+
 export function StagePanel({
   projectId,
   stage,
@@ -101,6 +135,18 @@ export function StagePanel({
   const [assigneeId, setAssigneeId] = useState(stage.assigneeId ?? "");
   const [notes, setNotes] = useState(stage.notes ?? "");
   const [saving, setSaving] = useState(false);
+
+  // ── 파일 업로드 ──
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadDocType, setUploadDocType] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [startDateInput, setStartDateInput] = useState(
+    stage.startDate ? new Date(stage.startDate).toISOString().split("T")[0] : ""
+  );
+  const [dueDateInput, setDueDateInput] = useState(
+    stage.dueDate ? new Date(stage.dueDate).toISOString().split("T")[0] : ""
+  );
+  const [dateSaving, setDateSaving] = useState(false);
 
   // ── DB 문서 (StageDocument) ──
   const [docs, setDocs] = useState<StageDoc[]>([]);
@@ -139,6 +185,12 @@ export function StagePanel({
 
   const canComplete = (canManage || isAssignee) && stage.status === "ACTIVE";
   const canAssign = canManage;
+  const missingRequiredFields = [
+    !stage.startDate && "시작일",
+    !stage.dueDate && "완료 예정일",
+    !stage.assigneeId && "담당자",
+  ].filter(Boolean) as string[];
+  const canCompleteButton = canComplete && missingRequiredFields.length === 0;
 
   // ── 동기화된 Drive 파일은 "시스템 문서"에 이미 있으므로 Drive 섹션에서 제외 ──
   // DB 문서 중 storageType=GOOGLE_DRIVE인 파일명 Set
@@ -165,6 +217,43 @@ export function StagePanel({
       : stage.status === "ACTIVE"
       ? "bg-blue-500 text-white animate-pulse"
       : "bg-gray-200 text-gray-600";
+
+  async function handleUpload() {
+    if (!uploadFile) { toast.warning("파일을 선택해 주세요."); return; }
+    setUploading(true);
+    const form = new FormData();
+    form.append("file", uploadFile);
+    form.append("stageNumber", String(stage.stageNumber));
+    form.append("documentType", uploadDocType);
+    const res = await fetch(`/api/v1/projects/${projectId}/documents`, {
+      method: "POST",
+      body: form,
+    });
+    const payload = await res.json();
+    setUploading(false);
+    if (!payload.success) { toast.error(payload.error?.message ?? "업로드에 실패했습니다."); return; }
+    toast.success("파일이 등록되었습니다.");
+    setUploadFile(null);
+    setDocsFetched(false);
+    void fetchDocs();
+  }
+
+  async function handleSaveDates() {
+    setDateSaving(true);
+    const res = await fetch(`/api/v1/projects/${projectId}/stages/${stage.stageNumber}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        startDate: startDateInput || null,
+        dueDate: dueDateInput || null,
+      }),
+    });
+    const payload = await res.json();
+    setDateSaving(false);
+    if (!payload.success) { toast.error("날짜 저장에 실패했습니다."); return; }
+    toast.success("날짜를 저장했습니다.");
+    onRefresh();
+  }
 
   async function handleAssign() {
     if (!assigneeId) { toast.warning("담당자를 선택해 주세요."); return; }
@@ -221,7 +310,7 @@ export function StagePanel({
           {stage.status === "COMPLETED" ? "✓" : stage.stageNumber}
         </span>
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-sm">
+          <p className="font-semibold text-sm truncate leading-tight">
             {stage.stageNumber}단계 — {STAGE_NAMES[stage.stageNumber]}
           </p>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -230,6 +319,9 @@ export function StagePanel({
               <span className="ml-1 text-blue-500">· 문서 {totalDocCount}건</span>
             )}
           </p>
+        </div>
+        <div className="flex-shrink-0">
+          {renderStageTrafficLight(stage)}
         </div>
         <span className="text-slate-400 text-sm">{open ? "▲" : "▼"}</span>
       </button>
@@ -241,16 +333,82 @@ export function StagePanel({
           <p className="text-sm text-slate-600">{STAGE_DESCRIPTIONS[stage.stageNumber]}</p>
 
           {/* 날짜 정보 */}
-          <div className="grid grid-cols-2 gap-3 text-xs text-slate-500">
-            <div>
-              <span className="font-semibold">시작일</span>
-              <p>{stage.startDate ? new Date(stage.startDate).toLocaleDateString("ko-KR") : "—"}</p>
+          {stage.status !== "COMPLETED" && stage.status !== "SKIPPED" && (canManage || isAssignee) ? (
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-xs">
+                  <span className="font-semibold text-slate-500 block mb-1">시작일</span>
+                  <input
+                    type="date"
+                    value={startDateInput}
+                    onChange={(e) => setStartDateInput(e.target.value)}
+                    className="h-9 w-full rounded border px-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </label>
+                <label className="text-xs">
+                  <span className="font-semibold text-slate-500 block mb-1">완료 예정일</span>
+                  <input
+                    type="date"
+                    value={dueDateInput}
+                    min={startDateInput || undefined}
+                    onChange={(e) => setDueDateInput(e.target.value)}
+                    className="h-9 w-full rounded border px-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </label>
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleSaveDates()}
+                disabled={dateSaving}
+                className="rounded bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60 hover:bg-slate-800"
+              >
+                {dateSaving ? "저장 중..." : "날짜 저장"}
+              </button>
             </div>
-            <div>
-              <span className="font-semibold">완료일</span>
-              <p>{stage.completedDate ? new Date(stage.completedDate).toLocaleDateString("ko-KR") : "—"}</p>
+          ) : (
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-3 text-xs text-slate-500">
+                <div>
+                  <span className="font-semibold">시작일</span>
+                  <p>{stage.startDate ? new Date(stage.startDate).toLocaleDateString("ko-KR") : "—"}</p>
+                </div>
+                <div>
+                  <span className="font-semibold">완료 예정일</span>
+                  <p>{stage.dueDate ? new Date(stage.dueDate).toLocaleDateString("ko-KR") : "—"}</p>
+                </div>
+                <div>
+                  <span className="font-semibold">완료일</span>
+                  <p>
+                    {stage.completedDate ? new Date(stage.completedDate).toLocaleDateString("ko-KR") : "—"}
+                    {stage.completedDate && stage.dueDate && (() => {
+                      const diff = Math.round(
+                        (new Date(stage.completedDate).getTime() - new Date(stage.dueDate).getTime())
+                        / (1000 * 60 * 60 * 24)
+                      );
+                      const diffLabel = diff === 0 ? null : diff > 0 ? `+${diff}일` : `${diff}일`;
+                      return diffLabel ? (
+                        <span className={`ml-1.5 text-[10px] font-semibold ${diff >= 5 ? "text-red-500" : diff > 0 ? "text-yellow-600" : "text-blue-500"}`}>
+                          ({diffLabel})
+                        </span>
+                      ) : null;
+                    })()}
+                  </p>
+                </div>
+              </div>
+              {stage.completedDate && stage.dueDate && (() => {
+                const diff = Math.round(
+                  (new Date(stage.completedDate).getTime() - new Date(stage.dueDate).getTime())
+                  / (1000 * 60 * 60 * 24)
+                );
+                const diffLabel = diff === 0 ? null : diff > 0 ? `+${diff}일` : `${diff}일`;
+                return diffLabel ? (
+                  <span className={`ml-1.5 text-[10px] font-semibold ${diff >= 5 ? "text-red-500" : diff > 0 ? "text-yellow-600" : "text-blue-500"}`}>
+                    ({diffLabel})
+                  </span>
+                ) : null;
+              })()}
             </div>
-          </div>
+          )}
 
           {/* 메모 */}
           {stage.notes && (
@@ -261,7 +419,7 @@ export function StagePanel({
           )}
 
           {/* ── Google Drive 문서 (미동기화 파일만 표시) ──────────────── */}
-          {(unsyncedDriveFiles.length > 0 || driveLoading) && (
+          {(unsyncedDriveFiles.length > 0 || (driveLoading && driveFiles.length > 0)) && (
             <div>
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-xs font-semibold text-amber-700 flex items-center gap-1">
@@ -357,15 +515,14 @@ export function StagePanel({
                   </span>
                 )}
               </div>
-              {docsFetched && (
-                <button
-                  type="button"
-                  onClick={() => { setDocsFetched(false); void fetchDocs(); }}
-                  className="text-xs text-blue-500 hover:underline"
-                >
-                  새로고침
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => { setDocsFetched(false); void fetchDocs(); }}
+                disabled={docsLoading}
+                className="text-xs text-blue-500 hover:underline disabled:opacity-50"
+              >
+                {docsLoading ? "새로고침 중..." : "새로고침"}
+              </button>
             </div>
 
             {docsLoading ? (
@@ -446,6 +603,44 @@ export function StagePanel({
             )}
           </div>
 
+          {/* 파일 업로드 */}
+          {(canManage || isAssignee) && stage.status !== "COMPLETED" && stage.status !== "SKIPPED" && (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-slate-500">파일 등록</p>
+              <div className="flex flex-col gap-2">
+                <div className="flex gap-2">
+                  <select
+                    className="h-9 rounded border px-2 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={uploadDocType}
+                    onChange={(e) => setUploadDocType(e.target.value)}
+                  >
+                      <option value="">종류 선택</option>
+                    {Object.entries(DOCUMENT_TYPE_LABELS).map(([k, v]) => (
+                      <option key={k} value={k}>{v}</option>
+                    ))}
+                  </select>
+                  <label className="flex-1 flex items-center gap-2 h-9 rounded border px-3 text-xs text-slate-500 cursor-pointer hover:bg-slate-50">
+                    <span>{uploadFile ? uploadFile.name : "파일 선택..."}</span>
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept=".pdf,.xlsx,.xls,.doc,.docx,.hwp,.dwg,.dxf,.jpg,.jpeg,.png,.gif"
+                      onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
+                    />
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleUpload()}
+                  disabled={uploading || !uploadFile || !uploadDocType}
+                  className="h-9 rounded bg-blue-600 px-4 text-xs font-semibold text-white disabled:opacity-60 hover:bg-blue-700"
+                >
+                  {uploading ? "업로드 중..." : "등록"}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* 담당자 지정 (MANAGER/ADMIN만) */}
           {canAssign && stage.status !== "COMPLETED" && (
             <div className="space-y-2">
@@ -484,9 +679,14 @@ export function StagePanel({
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
               />
+              {missingRequiredFields.length > 0 && (
+                <p className="text-xs text-rose-600">
+                  완료 전에 다음 항목을 모두 채워야 합니다: {missingRequiredFields.join(", ")}.
+                </p>
+              )}
               <button
                 type="submit"
-                disabled={saving}
+                disabled={saving || !canCompleteButton}
                 className="h-10 rounded bg-green-600 px-4 text-sm font-semibold text-white disabled:opacity-60"
               >
                 {saving ? "처리 중..." : `${stage.stageNumber}단계 완료`}

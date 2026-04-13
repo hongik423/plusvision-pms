@@ -144,6 +144,7 @@ model ProjectStage {
   status        StageStatus @default(INACTIVE)
   assigneeId    String?
   startDate     DateTime?
+  dueDate       DateTime?
   completedDate DateTime?
   notes         String?
   createdAt     DateTime    @default(now())

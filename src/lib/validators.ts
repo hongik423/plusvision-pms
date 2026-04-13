@@ -16,6 +16,11 @@ export const assignStageSchema = z.object({
   assigneeId: z.string().min(1, "담당자를 선택해 주세요."),
 });
 
+export const updateStageDatesSchema = z.object({
+  startDate: z.string().nullable().optional(),
+  dueDate: z.string().nullable().optional(),
+});
+
 export const completeStageSchema = z.object({
   notes: z.string().optional(),
   status: z.enum(["COMPLETED", "SKIPPED"]).default("COMPLETED"),

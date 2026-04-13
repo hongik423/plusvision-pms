@@ -77,7 +77,9 @@ export async function uploadProjectDocument(input: {
   const storedFileName = documentNumber
     ? buildDriveFileName(documentNumber, input.file.name)
     : input.file.name;
-  const key = `${input.projectId}/stage-${input.stageNumber}/${Date.now()}-${storedFileName}`;
+  // Supabase Storage key에서 대괄호, 공백 등 허용되지 않는 문자 제거
+  const safeFileName = storedFileName.replace(/[\[\]]/g, "").replace(/\s+/g, "_");
+  const key = `${input.projectId}/stage-${input.stageNumber}/${Date.now()}-${safeFileName}`;
   const supabaseAdmin = getSupabaseAdmin();
   const upload = await supabaseAdmin.storage.from(BUCKET).upload(key, buffer, {
     contentType: input.file.type,

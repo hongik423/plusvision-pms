@@ -25,6 +25,7 @@ type StageData = {
   assigneeId: string | null;
   assignee: { id: string; name: string } | null;
   startDate: string | null;
+  dueDate: string | null;
   completedDate: string | null;
   notes: string | null;
 };
@@ -202,6 +203,7 @@ export function ProjectDetailClient({
             assigneeId: string | null;
             assignee?: { id: string; name: string } | null;
             startDate: string | null;
+            dueDate: string | null;
             completedDate: string | null;
             notes: string | null;
           }) => ({
@@ -212,6 +214,7 @@ export function ProjectDetailClient({
             assigneeId: s.assigneeId,
             assignee: s.assignee ?? null,
             startDate: s.startDate,
+            dueDate: s.dueDate,
             completedDate: s.completedDate,
             notes: s.notes ?? null,
           })),
@@ -280,183 +283,8 @@ export function ProjectDetailClient({
 
   return (
     <div className="space-y-3">
-      {/* Drive 폴더 연결 + 동기화 UI (canManage만) */}
-      {canManage && driveLinksFetched && (
-        <div className="rounded-xl border bg-white p-4 space-y-3">
-          {/* ── 연결된 Drive 폴더 목록 ── */}
-          {driveLinks.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">
-                <span className="inline-block h-2 w-2 rounded-full bg-green-500" />
-                Drive 폴더 {driveLinks.length}개 연결됨
-              </p>
-              <ul className="space-y-1.5">
-                {driveLinks.map((link) => (
-                  <li key={link.id} className="flex items-center gap-2 rounded-lg border border-green-100 bg-green-50 px-3 py-2">
-                    <span className="text-sm">📁</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-700 truncate">
-                        {link.folderName ?? link.driveFolderId}
-                      </p>
-                      {link.driveFileCount != null && (
-                        <p className="text-[10px] text-slate-400 mt-0.5">
-                          전체 {link.driveFileCount}개 파일
-                          {(link.unsyncedCount ?? 0) > 0 && (
-                            <span className="ml-1.5 rounded bg-amber-100 px-1 py-0.5 text-amber-700 font-semibold">
-                              미동기화 {link.unsyncedCount}개
-                            </span>
-                          )}
-                          {link.unsyncedCount === 0 && link.driveFileCount > 0 && (
-                            <span className="ml-1.5 rounded bg-green-100 px-1 py-0.5 text-green-700 font-semibold">
-                              모두 동기화됨 ✓
-                            </span>
-                          )}
-                        </p>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => void handleSync(link.id)}
-                      disabled={syncing}
-                      className="flex-shrink-0 rounded bg-indigo-600 px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-60 hover:bg-indigo-700"
-                    >
-                      {syncing ? "저장 중..." : "매핑된 문서 저장"}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-              {/* 전체 동기화 버튼 (링크가 2개 이상일 때) */}
-              {driveLinks.length > 1 && (
-                <button
-                  type="button"
-                  onClick={() => void handleSync()}
-                  disabled={syncing}
-                  className="w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-60 hover:bg-indigo-700"
-                >
-                  {syncing ? "저장 중..." : "전체 폴더 매핑된 문서 저장"}
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* ── Drive 폴더 연결 폼 ── */}
-          {showLinkForm ? (
-            <form onSubmit={handleLinkDrive} className="space-y-3">
-              <h3 className="text-sm font-semibold text-slate-700">
-                {driveLinks.length > 0 ? "Drive 폴더 추가 연결" : "Drive 폴더 연결"}
-              </h3>
-              <p className="text-xs text-slate-500">
-                <Link href="/drive" className="text-blue-600 hover:underline">자료실</Link>에서
-                폴더를 찾은 뒤, 폴더 URL 또는 ID를 붙여넣으세요.
-              </p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="text-sm">
-                  <span className="mb-1 block font-medium text-slate-600">폴더 URL 또는 ID</span>
-                  <input
-                    type="text"
-                    value={linkForm.driveFolderId}
-                    onChange={(e) => setLinkForm((p) => ({ ...p, driveFolderId: e.target.value }))}
-                    placeholder="https://drive.google.com/drive/folders/... 또는 폴더 ID"
-                    className="h-10 w-full rounded border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </label>
-                <label className="text-sm">
-                  <span className="mb-1 block font-medium text-slate-600">폴더명 (선택)</span>
-                  <input
-                    type="text"
-                    value={linkForm.folderName}
-                    onChange={(e) => setLinkForm((p) => ({ ...p, folderName: e.target.value }))}
-                    placeholder="표시용 이름"
-                    className="h-10 w-full rounded border px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </label>
-              </div>
-              {linkError && <p className="text-sm text-red-600">{linkError}</p>}
-              <div className="flex gap-2">
-                <button
-                  type="submit"
-                  disabled={linkSubmitting}
-                  className="rounded bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 hover:bg-blue-700"
-                >
-                  {linkSubmitting ? "연결 중..." : "연결"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => { setShowLinkForm(false); setLinkError(null); }}
-                  className="rounded border px-4 py-2 text-sm font-medium hover:bg-slate-50"
-                >
-                  취소
-                </button>
-              </div>
-            </form>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowLinkForm(true)}
-              className="flex items-center gap-1.5 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm font-medium text-slate-500 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-            >
-              <span className="text-base">＋</span>
-              {driveLinks.length === 0 ? "Drive 폴더 연결" : "폴더 추가 연결"}
-            </button>
-          )}
-
-          {/* 매핑된 문서 저장 — 고객명/프로젝트명으로 Drive 폴더 자동 매핑 (폴더 연결 불필요) */}
-          <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-200 mt-2 pt-3">
-            <button
-              type="button"
-              onClick={() =>
-                driveLinks.length === 1
-                  ? void handleSync(driveLinks[0]!.id)
-                  : void handleSync()
-              }
-              disabled={syncing}
-              title="고객명/프로젝트명으로 Drive 폴더를 자동 매핑하여 저장합니다"
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60 hover:bg-indigo-700"
-            >
-              {syncing
-                ? "저장 중..."
-                : driveLinks.length === 1
-                  ? "매핑된 문서 저장"
-                  : driveLinks.length > 1
-                    ? "전체 폴더 매핑된 문서 저장"
-                    : "매핑된 문서 저장"}
-            </button>
-            {!showLinkForm && (
-              <div className="space-y-1">
-                <p className="text-xs text-slate-500">
-                  <strong>매핑된 문서 저장</strong> — 아래 각 단계에서도 단계별 저장 가능합니다.
-                </p>
-                <p className="text-xs text-slate-400">
-                  고객명/프로젝트명에 해당하는 Drive 폴더 매핑이 없으면 자동 저장되지 않습니다. 매핑된 고객(삼성, 디티에스 등)만 자동 저장됩니다. 매핑이 없으면 위 &quot;Drive 폴더 연결&quot;로 수동 연결해 주세요.
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-xl font-semibold">10단계 진행 현황</h2>
-        {driveFetched && driveTotalFiles > 0 && (
-          <div className="flex items-center gap-2">
-            <span className="rounded-lg bg-green-50 border border-green-200 px-2.5 py-1 text-xs text-green-700">
-              📁 <strong>{driveFolderName}</strong> — Google Drive {driveTotalFiles}개 파일 연동
-            </span>
-            <button
-              type="button"
-              onClick={() => { setDriveFetched(false); void fetchDriveFiles(); }}
-              className="text-xs text-blue-500 hover:underline"
-            >
-              새로고침
-            </button>
-          </div>
-        )}
-        {driveLoading && (
-          <span className="flex items-center gap-1.5 text-xs text-slate-400">
-            <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-blue-500" />
-            Drive 파일 조회 중...
-          </span>
-        )}
       </div>
       <div className="space-y-2">
         {stages.map((stage) => (

@@ -60,6 +60,7 @@ export default async function ProjectDetailPage({ params }: { params: { id: stri
     assigneeId: s.assigneeId,
     assignee: s.assignee ? { id: s.assignee.id, name: s.assignee.name } : null,
     startDate: s.startDate?.toISOString() ?? null,
+    dueDate: s.dueDate?.toISOString() ?? null,
     completedDate: s.completedDate?.toISOString() ?? null,
     notes: s.notes ?? null,
   }));

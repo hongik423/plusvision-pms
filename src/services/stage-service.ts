@@ -27,6 +27,26 @@ export async function getStage(projectId: string, stageNumber: number) {
   });
 }
 
+export async function updateStageDates({
+  projectId,
+  stageNumber,
+  startDate,
+  dueDate,
+}: {
+  projectId: string;
+  stageNumber: number;
+  startDate?: string | null;
+  dueDate?: string | null;
+}) {
+  return prisma.projectStage.update({
+    where: { projectId_stageNumber: { projectId, stageNumber } },
+    data: {
+      ...(startDate !== undefined ? { startDate: startDate ? new Date(startDate) : null } : {}),
+      ...(dueDate !== undefined ? { dueDate: dueDate ? new Date(dueDate) : null } : {}),
+    },
+  });
+}
+
 export async function assignStage({
   projectId,
   stageNumber,
@@ -112,6 +132,10 @@ export async function completeStage({
 
   if (!current) {
     throw new Error("단계를 찾을 수 없습니다.");
+  }
+
+  if (!current.startDate || !current.dueDate || !current.assigneeId) {
+    throw new Error("완료 전에 시작일, 완료 예정일, 담당자를 모두 지정해야 합니다.");
   }
 
   // [수정] 현재 단계가 ACTIVE 상태인지 확인

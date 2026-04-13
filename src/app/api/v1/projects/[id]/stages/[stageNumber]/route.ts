@@ -1,7 +1,7 @@
 import { fail, ok } from "@/lib/api-response";
 import { requireProjectAccess } from "@/lib/api-auth";
-import { assignStageSchema } from "@/lib/validators";
-import { assignStage, getStage } from "@/services/stage-service";
+import { assignStageSchema, updateStageDatesSchema } from "@/lib/validators";
+import { assignStage, getStage, updateStageDates } from "@/services/stage-service";
 
 export async function GET(
   _request: Request,
@@ -28,11 +28,27 @@ export async function PATCH(
   }
 
   const body = await request.json();
+
+  // 날짜 업데이트 요청
+  if ("startDate" in body || "dueDate" in body) {
+    const parsed = updateStageDatesSchema.safeParse(body);
+    if (!parsed.success) {
+      return fail({ code: "VALIDATION_ERROR", message: "날짜 형식을 확인해 주세요." }, 400);
+    }
+    const row = await updateStageDates({
+      projectId: params.id,
+      stageNumber: Number(params.stageNumber),
+      startDate: parsed.data.startDate,
+      dueDate: parsed.data.dueDate,
+    });
+    return ok(row);
+  }
+
+  // 담당자 지정 요청
   const parsed = assignStageSchema.safeParse(body);
   if (!parsed.success) {
     return fail({ code: "VALIDATION_ERROR", message: "담당자를 확인해 주세요." }, 400);
   }
-
   const row = await assignStage({
     projectId: params.id,
     stageNumber: Number(params.stageNumber),

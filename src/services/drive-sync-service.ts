@@ -355,9 +355,10 @@ export async function syncDriveFolder(
       const buffer = await adapter.downloadFile(file.id, file.mimeType);
       const finalName     = exportInfo ? `${file.name}${exportInfo.ext}` : file.name;
       const finalMimeType = exportInfo ? exportInfo.exportMimeType : file.mimeType;
+      const safeFileName  = finalName.replace(/[[\]]/g, "").replace(/\s+/g, "_");
 
       // Supabase Storage 업로드
-      const key = `${link.projectId}/stage-${classified.stageNumber}/${Date.now()}-${finalName}`;
+      const key = `${link.projectId}/stage-${classified.stageNumber}/${Date.now()}-${safeFileName}`;
       const { error: uploadErr } = await supabase.storage.from(BUCKET).upload(key, buffer, {
         contentType: finalMimeType,
         upsert:      false,
