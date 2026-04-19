@@ -7,15 +7,15 @@ import { signOut, useSession } from "next-auth/react";
 import { useState } from "react";
 import { NotificationBell } from "./notification-bell";
 
-type NavItem = { href: string; label: string; adminOnly?: boolean };
+type NavItem = { href: string; label: string; minRole?: "ADMIN" | "MANAGER" };
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "대시보드" },
   { href: "/projects", label: "프로젝트" },
   { href: "/drive", label: "자료실" },
   { href: "/search", label: "검색" },
-  { href: "/admin/master", label: "관리", adminOnly: true },
-  { href: "/admin/migration", label: "마이그레이션", adminOnly: true },
+  { href: "/admin/master", label: "관리", minRole: "MANAGER" },
+  { href: "/admin/migration", label: "마이그레이션", minRole: "ADMIN" },
   { href: "/settings", label: "설정" },
 ];
 
@@ -23,10 +23,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { data } = useSession();
   const pathname = usePathname() ?? "";
   const role = data?.user?.role ?? "VIEWER";
-  const isAdmin = role === "ADMIN";
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const visibleItems = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin);
+  const visibleItems = NAV_ITEMS.filter((item) => {
+    if (!item.minRole) return true;
+    if (item.minRole === "MANAGER") return role === "ADMIN" || role === "MANAGER";
+    if (item.minRole === "ADMIN") return role === "ADMIN";
+    return false;
+  });
 
   return (
     <div className="min-h-screen bg-slate-50">
