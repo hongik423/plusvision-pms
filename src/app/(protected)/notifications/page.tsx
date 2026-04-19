@@ -48,7 +48,7 @@ export default function NotificationsPage() {
 
   async function markAllAsRead() {
     setMarkingAll(true);
-    await fetch("/api/v1/notifications/read-all", { method: "PATCH" });
+    await fetch("/api/v1/notifications/read-all", { method: "POST" });
     setRows((prev) => prev.map((n) => ({ ...n, isRead: true })));
     setMarkingAll(false);
     toast.success("모든 알림을 읽음으로 표시했습니다.");

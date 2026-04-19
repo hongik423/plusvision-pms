@@ -11,10 +11,10 @@ type NotifPrefs = {
 };
 
 const DEFAULT_PREFS: NotifPrefs = {
-  emailStageAssigned: true,
-  emailStageReady: true,
-  emailPasswordReset: true,
-  inAppAll: true,
+  emailStageAssigned: false,
+  emailStageReady: false,
+  emailPasswordReset: false,
+  inAppAll: false,
 };
 
 const STORAGE_KEY = "pluspms_notif_prefs";
