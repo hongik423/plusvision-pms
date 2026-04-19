@@ -20,9 +20,14 @@ export function NotificationBell() {
 
   useEffect(() => {
     void fetchCount();
-    // 60초마다 자동 갱신 (DB 연결 제한 고려)
     const timer = setInterval(() => void fetchCount(), 60_000);
-    return () => clearInterval(timer);
+    // 알림 읽음 처리 시 즉시 갱신
+    const handler = () => void fetchCount();
+    window.addEventListener("notif-updated", handler);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("notif-updated", handler);
+    };
   }, []);
 
   return (

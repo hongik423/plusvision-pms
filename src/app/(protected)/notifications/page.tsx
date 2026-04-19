@@ -41,9 +41,8 @@ export default function NotificationsPage() {
 
   async function markAsRead(id: string) {
     await fetch(`/api/v1/notifications/${id}/read`, { method: "PATCH" });
-    setRows((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)),
-    );
+    setRows((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)));
+    window.dispatchEvent(new Event("notif-updated"));
   }
 
   async function markAllAsRead() {
@@ -52,6 +51,7 @@ export default function NotificationsPage() {
     setRows((prev) => prev.map((n) => ({ ...n, isRead: true })));
     setMarkingAll(false);
     toast.success("모든 알림을 읽음으로 표시했습니다.");
+    window.dispatchEvent(new Event("notif-updated"));
   }
 
   const unreadCount = rows.filter((n) => !n.isRead).length;
