@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type Option = { id: string; name: string };
+type Option = { id: string; name: string; isActive?: boolean };
 
 export default function NewProjectPage() {
   const router = useRouter();
@@ -244,7 +244,7 @@ function Select({
       <span className="mb-2 block text-sm font-semibold">{label}</span>
       <select className="h-11 w-full rounded border px-3" value={value} onChange={(e) => onChange(e.target.value)}>
         <option value="">선택</option>
-        {options.map((option) => (
+        {options.filter((o) => o.isActive !== false).map((option) => (
           <option key={option.id} value={option.id}>
             {option.name}
           </option>

@@ -6,6 +6,7 @@ import { getProjectById } from "@/services/project-service";
 import { prisma } from "@/lib/prisma";
 import { PROJECT_STATUS_COLORS, PROJECT_STATUS_LABELS, STAGE_STATUS_COLORS } from "@/lib/constants";
 import { ProjectDetailClient } from "./project-detail-client";
+import { ProjectStatusChanger } from "@/components/project/project-status-changer";
 import type { Route } from "next";
 import Link from "next/link";
 
@@ -83,12 +84,15 @@ export default async function ProjectDetailPage({ params }: { params: { id: stri
             )}
           </div>
           {canManage && (
-            <Link
-              href={`/projects/${project.id}/history` as Route}
-              className="rounded border px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-50"
-            >
-              변경 이력
-            </Link>
+            <div className="flex items-center gap-2">
+              <ProjectStatusChanger projectId={project.id} currentStatus={project.status} />
+              <Link
+                href={`/projects/${project.id}/history` as Route}
+                className="rounded border px-3 py-1.5 text-xs text-slate-500 hover:bg-slate-50"
+              >
+                변경 이력
+              </Link>
+            </div>
           )}
         </div>
 

@@ -83,28 +83,22 @@ function getFileIcon(fileName: string, mimeType: string) {
 }
 
 function renderStageTrafficLight(stage: StageData) {
-  const due = stage.dueDate ? new Date(stage.dueDate) : null;
-  if (due) due.setHours(0, 0, 0, 0);
+  if (!stage.startDate || !stage.dueDate) return null;
+  if (stage.status === "COMPLETED" || stage.status === "SKIPPED") return null;
+
+  const due = new Date(stage.dueDate);
+  due.setHours(0, 0, 0, 0);
 
   let isRed = false;
   let isYellow = false;
   let isGreen = false;
 
-  if (due && stage.status === "COMPLETED" && stage.completedDate) {
-    const completed = new Date(stage.completedDate);
-    completed.setHours(0, 0, 0, 0);
-    const diff = Math.round((completed.getTime() - due.getTime()) / (1000 * 60 * 60 * 24));
-    isRed = diff >= 5;
-    isYellow = diff > 0 && diff < 5;
-    isGreen = diff <= 0;
-  } else if (due && stage.status !== "SKIPPED") {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const diff = Math.round((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    isRed = diff <= -3;
-    isYellow = diff >= -2 && diff <= 1;
-    isGreen = diff >= 2;
-  }
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diff = Math.round((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  isGreen = diff >= 3;
+  isYellow = diff >= 0 && diff <= 2;
+  isRed = diff < 0;
 
   return (
     <span className="flex items-center gap-2.5 px-3.5 py-2 rounded-2xl border-2 border-gray-700 bg-gray-900 text-white shadow-sm">
@@ -395,18 +389,6 @@ export function StagePanel({
                   </p>
                 </div>
               </div>
-              {stage.completedDate && stage.dueDate && (() => {
-                const diff = Math.round(
-                  (new Date(stage.completedDate).getTime() - new Date(stage.dueDate).getTime())
-                  / (1000 * 60 * 60 * 24)
-                );
-                const diffLabel = diff === 0 ? null : diff > 0 ? `+${diff}일` : `${diff}일`;
-                return diffLabel ? (
-                  <span className={`ml-1.5 text-[10px] font-semibold ${diff >= 5 ? "text-red-500" : diff > 0 ? "text-yellow-600" : "text-blue-500"}`}>
-                    ({diffLabel})
-                  </span>
-                ) : null;
-              })()}
             </div>
           )}
 

@@ -350,7 +350,9 @@ export function MasterCrudPanel() {
                 <td className="p-2">{row.name}</td>
                 <td className="p-2">{row.code}</td>
                 <td className="p-2">{row.address ?? "-"}</td>
-                <td className="p-2">{row.isActive ? "사용중" : "비활성"}</td>
+                <td className="p-2">
+                  <StatusBadge isActive={row.isActive} />
+                </td>
                 <td className="p-2">
                   <div className="flex gap-2">
                     <button
@@ -405,7 +407,9 @@ export function MasterCrudPanel() {
               <tr key={row.id} className="border-b">
                 <td className="p-2">{row.name}</td>
                 <td className="p-2">{row.code}</td>
-                <td className="p-2">{row.isActive ? "사용중" : "비활성"}</td>
+                <td className="p-2">
+                  <StatusBadge isActive={row.isActive} />
+                </td>
                 <td className="p-2">
                   <div className="flex gap-2">
                     <button
@@ -463,7 +467,9 @@ export function MasterCrudPanel() {
               <tr key={row.id} className="border-b">
                 <td className="p-2">{row.name}</td>
                 <td className="p-2">{row.code}</td>
-                <td className="p-2">{row.isActive ? "사용중" : "비활성"}</td>
+                <td className="p-2">
+                  <StatusBadge isActive={row.isActive} />
+                </td>
                 <td className="p-2">
                   <div className="flex gap-2">
                     <button
@@ -531,7 +537,9 @@ export function MasterCrudPanel() {
                 <td className="p-2">{row.code}</td>
                 <td className="p-2">{row.contact ?? "-"}</td>
                 <td className="p-2">{row.phone ?? "-"}</td>
-                <td className="p-2">{row.isActive ? "사용중" : "비활성"}</td>
+                <td className="p-2">
+                  <StatusBadge isActive={row.isActive} />
+                </td>
                 <td className="p-2">
                   <div className="flex gap-2">
                     <button
@@ -619,7 +627,9 @@ export function MasterCrudPanel() {
                 <td className="p-2">{row.unit}</td>
                 <td className="p-2">{Number(row.unitPrice ?? 0).toLocaleString()}</td>
                 <td className="p-2">{row.manufacturer ?? "-"}</td>
-                <td className="p-2">{row.isActive ? "사용중" : "비활성"}</td>
+                <td className="p-2">
+                  <StatusBadge isActive={row.isActive} />
+                </td>
                 <td className="p-2">
                   <div className="flex gap-2">
                     <button
@@ -712,6 +722,18 @@ function TabButton({ label, active, onClick }: { label: string; active: boolean;
     >
       {label}
     </button>
+  );
+}
+
+function StatusBadge({ isActive }: { isActive: boolean }) {
+  return isActive ? (
+    <span className="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
+      사용중
+    </span>
+  ) : (
+    <span className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700">
+      비활성
+    </span>
   );
 }
 

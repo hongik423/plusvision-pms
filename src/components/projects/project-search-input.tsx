@@ -32,6 +32,7 @@ export default function ProjectSearchInput({ defaultValue = "", inputName = "q" 
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasInteractedRef = useRef(false);
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
 
   // 클라이언트 마운트 확인 (Portal용)
@@ -121,8 +122,10 @@ export default function ProjectSearchInput({ defaultValue = "", inputName = "q" 
     }
   }, [updateDropdownPos]);
 
-  // ── 검색어 변경 → debounce 후 API 호출 ────────────────
+  // ── 검색어 변경 → debounce 후 API 호출 (사용자가 상호작용한 후에만) ────────────────
   useEffect(() => {
+    if (!hasInteractedRef.current) return;
+
     if (debounceRef.current) clearTimeout(debounceRef.current);
 
     debounceRef.current = setTimeout(() => {
@@ -136,6 +139,7 @@ export default function ProjectSearchInput({ defaultValue = "", inputName = "q" 
 
   // ── 포커스 시 (빈 입력이어도) 목록 표시 ───────────────
   const handleFocus = () => {
+    hasInteractedRef.current = true;
     if (suggestions.length > 0) {
       updateDropdownPos();
       setIsOpen(true);
