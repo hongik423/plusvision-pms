@@ -12,7 +12,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 
-const EMPTY_FORM = { email: "", name: "", password: "", role: "USER" as UserRow["role"], department: "", phone: "" };
+const EMPTY_FORM = { email: "", name: "", password: "", role: "" as UserRow["role"] | "", department: "", phone: "" };
 
 type UserRow = {
   id: string;
@@ -55,7 +55,7 @@ export function UserManagementPanel({ initialUsers }: Props) {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [editingUser, setEditingUser] = useState<UserRow | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", phone: "", department: "" });
+  const [editForm, setEditForm] = useState({ name: "", email: "", phone: "", department: "", role: "USER" as UserRow["role"] });
   const [editSaving, setEditSaving] = useState(false);
 
   async function updateUser(userId: string, body: Record<string, unknown>) {
@@ -112,17 +112,24 @@ export function UserManagementPanel({ initialUsers }: Props) {
 
   function openEdit(user: UserRow) {
     setEditingUser(user);
-    setEditForm({ name: user.name, phone: user.phone ?? "", department: user.department ?? "" });
+    setEditForm({ name: user.name, email: user.email, phone: user.phone ?? "", department: user.department ?? "", role: user.role });
   }
 
   async function saveEdit() {
     if (!editingUser) return;
     setEditSaving(true);
-    await updateUser(editingUser.id, {
-      name: editForm.name,
-      phone: editForm.phone || null,
-      department: editForm.department || null,
-    });
+    const tasks: Promise<void>[] = [
+      updateUser(editingUser.id, {
+        name: editForm.name,
+        email: editForm.email,
+        phone: editForm.phone || null,
+        department: editForm.department || null,
+      }),
+    ];
+    if (editForm.role !== editingUser.role) {
+      tasks.push(updateRole(editingUser.id, editForm.role));
+    }
+    await Promise.all(tasks);
     setPhoneInputs((prev) => ({ ...prev, [editingUser.id]: editForm.phone }));
     setEditSaving(false);
     setEditingUser(null);
@@ -184,8 +191,10 @@ export function UserManagementPanel({ initialUsers }: Props) {
         <select
           className="h-11 rounded border px-3 text-sm"
           value={form.role}
+          required
           onChange={(e) => setForm((p) => ({ ...p, role: e.target.value as UserRow["role"] }))}
         >
+          <option value="" disabled>권한설정 *</option>
           {ROLES.map((role) => (
             <option key={role} value={role}>{ROLE_LABELS[role]}</option>
           ))}
@@ -451,6 +460,15 @@ export function UserManagementPanel({ initialUsers }: Props) {
               />
             </div>
             <div className="space-y-1">
+              <label className="text-sm font-medium">이메일</label>
+              <input
+                className="w-full rounded border px-3 py-2 text-sm"
+                type="email"
+                value={editForm.email}
+                onChange={(e) => setEditForm((p) => ({ ...p, email: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1">
               <label className="text-sm font-medium">전화번호</label>
               <input
                 className="w-full rounded border px-3 py-2 text-sm"
@@ -458,6 +476,18 @@ export function UserManagementPanel({ initialUsers }: Props) {
                 onChange={(e) => setEditForm((p) => ({ ...p, phone: formatPhone(e.target.value) }))}
                 placeholder="010-0000-0000"
               />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">권한</label>
+              <select
+                className="w-full rounded border px-3 py-2 text-sm"
+                value={editForm.role}
+                onChange={(e) => setEditForm((p) => ({ ...p, role: e.target.value as UserRow["role"] }))}
+              >
+                {ROLES.map((role) => (
+                  <option key={role} value={role}>{ROLE_LABELS[role]}</option>
+                ))}
+              </select>
             </div>
             <div className="space-y-1">
               <label className="text-sm font-medium">부서</label>
