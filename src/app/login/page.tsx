@@ -43,9 +43,6 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center p-6">
       <form onSubmit={onSubmit} className="w-full max-w-md rounded-xl border bg-white p-6 shadow-sm">
         <h1 className="mb-6 text-2xl font-bold">PlusPMS 로그인</h1>
-        <p className="mb-4 text-sm text-slate-500">
-          테스트 계정: admin / PlusPms1!Adm, manager / PlusPms1!Mgr, test / PlusPms1!Tst
-        </p>
         <div className="space-y-2">
           <label className="text-sm font-semibold">아이디</label>
           <input
@@ -54,7 +51,7 @@ export default function LoginPage() {
             title="아이디"
             value={loginId}
             onChange={(e) => setLoginId(e.target.value)}
-            placeholder="admin | manager | test"
+            placeholder="이메일 주소를 입력하세요."
             required
           />
         </div>
@@ -66,7 +63,7 @@ export default function LoginPage() {
             title="비밀번호"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder="비밀번호 입력"
+            placeholder="비밀번호를 입력하세요."
             autoComplete="off"
             data-lpignore="true"
             data-form-type="other"
