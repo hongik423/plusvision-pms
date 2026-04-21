@@ -95,7 +95,8 @@ export const DOCUMENT_TYPE_LABELS = {
 /** 허용 파일 확장자 */
 export const ALLOWED_FILE_EXTENSIONS = [
   '.pdf', '.xlsx', '.xls', '.doc', '.docx',
-  '.hwp', '.dwg', '.dxf',
+  '.ppt', '.pptx',
+  '.hwp', '.hwpx', '.dwg', '.dxf',
   '.jpg', '.jpeg', '.png', '.gif',
 ] as const;
 

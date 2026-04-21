@@ -4,7 +4,6 @@ import { FormEvent, useCallback, useEffect, useState } from "react";
 import { STAGE_NAMES, STAGE_DESCRIPTIONS, DOCUMENT_TYPE_LABELS, PROJECT_STATUS_LABELS } from "@/lib/constants";
 import { useToastStore } from "@/store/toast-store";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import type { DriveStageFile } from "@/app/(protected)/projects/[id]/project-detail-client";
 
 type StageData = {
   id: string;
@@ -41,16 +40,6 @@ type Props = {
   isAssignee: boolean;
   users: UserOption[];
   onRefresh: () => void;
-  /** Drive에서 직접 조회한 파일 (부모 컴포넌트에서 전달) */
-  driveFiles?: DriveStageFile[];
-  /** Drive 파일 로딩 중 여부 */
-  driveLoading?: boolean;
-  /** 동기화 완료 시 문서 목록 재조회 트리거 */
-  docsRefreshTrigger?: number;
-  /** 해당 단계 매핑된 문서 저장 (Drive → 시스템) */
-  onSyncStage?: (stageNumber: number) => Promise<void>;
-  /** 매핑된 문서 저장 진행 중 (버튼 비활성화) */
-  syncing?: boolean;
 };
 
 const STATUS_LABEL: Record<StageData["status"], string> = {
@@ -116,11 +105,6 @@ export function StagePanel({
   isAssignee,
   users,
   onRefresh,
-  driveFiles = [],
-  driveLoading = false,
-  docsRefreshTrigger = 0,
-  onSyncStage,
-  syncing = false,
 }: Props) {
   const toast = useToastStore();
   const [open, setOpen] = useState(
@@ -164,13 +148,6 @@ export function StagePanel({
     }
   }, [projectId, stage.stageNumber, docsFetched]);
 
-  // docsRefreshTrigger 변경 시 문서 캐시 무효화 (동기화 완료 후 재조회)
-  useEffect(() => {
-    if (docsRefreshTrigger > 0) {
-      setDocsFetched(false);
-    }
-  }, [docsRefreshTrigger]);
-
   useEffect(() => {
     if (open && !docsFetched) {
       void fetchDocs();
@@ -186,24 +163,10 @@ export function StagePanel({
   ].filter(Boolean) as string[];
   const canCompleteButton = canComplete && missingRequiredFields.length === 0;
 
-  // ── 동기화된 Drive 파일은 "시스템 문서"에 이미 있으므로 Drive 섹션에서 제외 ──
-  // DB 문서 중 storageType=GOOGLE_DRIVE인 파일명 Set
-  const syncedFileNames = new Set(
-    docs
-      .filter((d) => d.storageType === "GOOGLE_DRIVE")
-      .map((d) => d.fileName),
-  );
-  // Drive 파일 중 아직 DB에 없는 것만 (미동기화)
-  const unsyncedDriveFiles = driveFiles.filter(
-    (f) => !syncedFileNames.has(f.fileName),
-  );
   // DB 문서 중 Drive에서 가져온 것 (storageType=GOOGLE_DRIVE)
   const syncedDriveDocs = docs.filter((d) => d.storageType === "GOOGLE_DRIVE");
   // DB 문서 중 직접 업로드한 것
   const uploadedDocs = docs.filter((d) => d.storageType !== "GOOGLE_DRIVE");
-
-  // 전체 문서 수 (DB + 미동기화 Drive)
-  const totalDocCount = docs.length + unsyncedDriveFiles.length;
 
   const statusBg =
     stage.status === "COMPLETED"
@@ -309,8 +272,8 @@ export function StagePanel({
           </p>
           <p className="text-xs text-slate-500 mt-0.5">
             담당: {stage.assignee?.name ?? "미지정"} · {STATUS_LABEL[stage.status]}
-            {totalDocCount > 0 && (
-              <span className="ml-1 text-blue-500">· 문서 {totalDocCount}건</span>
+            {docs.length > 0 && (
+              <span className="ml-1 text-blue-500">· 문서 {docs.length}건</span>
             )}
           </p>
         </div>
@@ -400,88 +363,6 @@ export function StagePanel({
             </div>
           )}
 
-          {/* ── Google Drive 문서 (미동기화 파일만 표시) ──────────────── */}
-          {(unsyncedDriveFiles.length > 0 || (driveLoading && driveFiles.length > 0)) && (
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-xs font-semibold text-amber-700 flex items-center gap-1">
-                  <span className="inline-block h-2 w-2 rounded-full bg-amber-400" />
-                  Drive 미동기화 파일
-                </span>
-                {!driveLoading && (
-                  <span className="text-[10px] text-slate-400">({unsyncedDriveFiles.length}건 — 시스템 저장 후 영구 보관)</span>
-                )}
-              </div>
-
-              {driveLoading ? (
-                <div className="flex items-center gap-2 py-3 text-xs text-slate-400">
-                  <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-green-500" />
-                  Drive 파일 조회 중...
-                </div>
-              ) : (
-                <ul className="space-y-1.5">
-                  {unsyncedDriveFiles.map((file) => (
-                    <li
-                      key={file.id}
-                      className="flex items-center gap-2.5 rounded-lg border border-amber-100 bg-amber-50/50 px-3 py-2 hover:bg-amber-50 transition-colors"
-                    >
-                      <span className="text-lg flex-shrink-0">
-                        {getFileIcon(file.fileName, file.mimeType)}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <a
-                          href={file.fileUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-xs font-semibold text-slate-700 hover:text-amber-700 hover:underline truncate block"
-                          title={file.relativePath ? `경로: ${file.relativePath}/${file.fileName}` : file.fileName}
-                        >
-                          {file.fileName}
-                        </a>
-                        <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-slate-400">
-                          <span className="rounded bg-amber-100 px-1 py-0.5 text-amber-700 font-medium">
-                            미동기화
-                          </span>
-                          <span className="rounded bg-green-100 px-1 py-0.5 text-green-700 font-medium">
-                            Drive
-                          </span>
-                          <span className="rounded bg-blue-100 px-1 py-0.5 text-blue-700">
-                            {DOCUMENT_TYPE_LABELS[file.documentType as keyof typeof DOCUMENT_TYPE_LABELS] ?? file.documentType}
-                          </span>
-                          {file.relativePath && (
-                            <span className="text-slate-300 truncate max-w-[120px]" title={file.relativePath}>
-                              📂 {file.relativePath}
-                            </span>
-                          )}
-                          <span>{formatBytes(file.fileSize)}</span>
-                          {file.modifiedTime && <span>{formatDate(file.modifiedTime)}</span>}
-                        </div>
-                      </div>
-                      <a
-                        href={file.fileUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex-shrink-0 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-[10px] font-medium text-amber-700 hover:bg-amber-100"
-                      >
-                        열기
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {canManage && unsyncedDriveFiles.length > 0 && onSyncStage && (
-                <button
-                  type="button"
-                  onClick={() => void onSyncStage(stage.stageNumber)}
-                  disabled={syncing}
-                  className="mt-2 w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
-                >
-                  {syncing ? "저장 중..." : `${stage.stageNumber}단계 매핑된 문서 저장`}
-                </button>
-              )}
-            </div>
-          )}
-
           {/* ── 시스템 문서 (직접 업로드 + Drive 동기화 완료) ──────────────── */}
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -512,7 +393,7 @@ export function StagePanel({
                 <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-blue-500" />
                 문서 조회 중...
               </div>
-            ) : docs.length === 0 && unsyncedDriveFiles.length === 0 ? (
+            ) : docs.length === 0 ? (
               <div className="rounded border border-dashed bg-white py-4 text-center text-xs text-slate-400">
                 등록된 문서가 없습니다
               </div>
@@ -606,7 +487,7 @@ export function StagePanel({
                     <input
                       type="file"
                       className="hidden"
-                      accept=".pdf,.xlsx,.xls,.doc,.docx,.hwp,.dwg,.dxf,.jpg,.jpeg,.png,.gif"
+                      accept=".pdf,.xlsx,.xls,.doc,.docx,.ppt,.pptx,.hwp,.hwpx,.dwg,.dxf,.jpg,.jpeg,.png,.gif"
                       onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)}
                     />
                   </label>

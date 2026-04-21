@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import { UserManagementPanel } from "@/components/admin/user-management-panel";
 import {
   Dialog,
   DialogContent,
@@ -52,7 +53,17 @@ type PartSpec = {
   isActive: boolean;
 };
 
-type TabKey = "sites" | "processTypes" | "itemTypes" | "customers" | "partSpecs";
+type TabKey = "sites" | "processTypes" | "itemTypes" | "customers" | "partSpecs" | "users";
+
+type UserRow = {
+  id: string;
+  name: string;
+  email: string;
+  role: "ADMIN" | "MANAGER" | "USER" | "VIEWER";
+  department: string | null;
+  phone: string | null;
+  isActive: boolean;
+};
 
 type MasterPayload = {
   sites: Site[];
@@ -66,6 +77,9 @@ export function MasterCrudPanel() {
   const [activeTab, setActiveTab] = useState<TabKey>("sites");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [users, setUsers] = useState<UserRow[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [usersFetched, setUsersFetched] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Record<string, unknown> & { id: string } | null>(null);
   const [editingFields, setEditingFields] = useState<Array<{ key: string; label: string; type?: string }>>([]);
@@ -125,6 +139,17 @@ export function MasterCrudPanel() {
 
   useEffect(() => {
     void fetchMasterData();
+    setUsersLoading(true);
+    fetch("/api/v1/users")
+      .then((r) => r.json())
+      .then((payload) => {
+        if (payload.success) setUsers(payload.data as UserRow[]);
+      })
+      .catch(() => {})
+      .finally(() => {
+        setUsersLoading(false);
+        setUsersFetched(true);
+      });
   }, []);
 
   const tabCounts = useMemo(
@@ -311,6 +336,7 @@ export function MasterCrudPanel() {
         <TabButton label={`품목 (${tabCounts.itemTypes})`} active={activeTab === "itemTypes"} onClick={() => setActiveTab("itemTypes")} />
         <TabButton label={`고객사 (${tabCounts.customers})`} active={activeTab === "customers"} onClick={() => setActiveTab("customers")} />
         <TabButton label={`부품 (${tabCounts.partSpecs})`} active={activeTab === "partSpecs"} onClick={() => setActiveTab("partSpecs")} />
+        <TabButton label={`사용자 (${users.length})`} active={activeTab === "users"} onClick={() => setActiveTab("users")} />
       </div>
 
       {loading ? <p className="text-sm text-slate-500">마스터 데이터를 불러오는 중입니다...</p> : null}
@@ -709,6 +735,14 @@ export function MasterCrudPanel() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {activeTab === "users" ? (
+        usersLoading ? (
+          <p className="text-sm text-slate-500">사용자 목록을 불러오는 중입니다...</p>
+        ) : (
+          <UserManagementPanel initialUsers={users} />
+        )
+      ) : null}
     </section>
   );
 }

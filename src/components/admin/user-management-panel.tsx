@@ -3,6 +3,16 @@
 import { useState } from "react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ROLE_LABELS } from "@/lib/constants";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
+
+const EMPTY_FORM = { email: "", name: "", password: "", role: "USER" as UserRow["role"], department: "", phone: "" };
 
 type UserRow = {
   id: string;
@@ -10,6 +20,7 @@ type UserRow = {
   email: string;
   role: "ADMIN" | "MANAGER" | "USER" | "VIEWER";
   department: string | null;
+  phone: string | null;
   isActive: boolean;
 };
 
@@ -26,10 +37,26 @@ const ROLE_COLOR: Record<UserRow["role"], string> = {
   VIEWER: "bg-gray-100 text-gray-600",
 };
 
+function formatPhone(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 7) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
+}
+
 export function UserManagementPanel({ initialUsers }: Props) {
   const [users, setUsers] = useState(initialUsers);
   const [loadingUserId, setLoadingUserId] = useState<string | null>(null);
   const [resetResult, setResetResult] = useState<{ userId: string; password: string } | null>(null);
+  const [phoneInputs, setPhoneInputs] = useState<Record<string, string>>(
+    () => Object.fromEntries(initialUsers.map((u) => [u.id, u.phone ?? ""]))
+  );
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [editingUser, setEditingUser] = useState<UserRow | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", phone: "", department: "" });
+  const [editSaving, setEditSaving] = useState(false);
 
   async function updateUser(userId: string, body: Record<string, unknown>) {
     setLoadingUserId(userId);
@@ -63,6 +90,49 @@ export function UserManagementPanel({ initialUsers }: Props) {
     setUsers((prev) => prev.map((user) => (user.id === userId ? payload.data : user)));
   }
 
+  async function createUser(e: React.FormEvent) {
+    e.preventDefault();
+    setCreating(true);
+    setCreateError(null);
+    const res = await fetch("/api/v1/users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...form, phone: form.phone || undefined, department: form.department || undefined }),
+    });
+    const payload = await res.json();
+    setCreating(false);
+    if (!payload.success) {
+      setCreateError(payload.error?.message ?? "사용자 생성에 실패했습니다.");
+      return;
+    }
+    setUsers((prev) => [payload.data, ...prev]);
+    setPhoneInputs((prev) => ({ ...prev, [payload.data.id]: payload.data.phone ?? "" }));
+    setForm(EMPTY_FORM);
+  }
+
+  function openEdit(user: UserRow) {
+    setEditingUser(user);
+    setEditForm({ name: user.name, phone: user.phone ?? "", department: user.department ?? "" });
+  }
+
+  async function saveEdit() {
+    if (!editingUser) return;
+    setEditSaving(true);
+    await updateUser(editingUser.id, {
+      name: editForm.name,
+      phone: editForm.phone || null,
+      department: editForm.department || null,
+    });
+    setPhoneInputs((prev) => ({ ...prev, [editingUser.id]: editForm.phone }));
+    setEditSaving(false);
+    setEditingUser(null);
+  }
+
+  async function savePhone(userId: string) {
+    const phone = phoneInputs[userId]?.trim() || null;
+    await updateUser(userId, { phone });
+  }
+
   async function resetPassword(userId: string) {
     setLoadingUserId(userId);
     const response = await fetch(`/api/v1/users/${userId}/reset-password`, { method: "POST" });
@@ -78,6 +148,57 @@ export function UserManagementPanel({ initialUsers }: Props) {
   return (
     <section className="space-y-4">
       <h1 className="text-3xl font-bold">사용자 관리</h1>
+
+      {/* 사용자 생성 폼 */}
+      <form onSubmit={(e) => void createUser(e)} className="grid gap-2 md:grid-cols-6">
+        <input
+          className="h-11 rounded border px-3 text-sm"
+          placeholder="이름 *"
+          value={form.name}
+          onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+          required
+        />
+        <input
+          className="h-11 rounded border px-3 text-sm"
+          placeholder="이메일 *"
+          type="email"
+          value={form.email}
+          onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
+          required
+        />
+        <input
+          className="h-11 rounded border px-3 text-sm"
+          placeholder="비밀번호 * (8자 이상)"
+          type="password"
+          value={form.password}
+          onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
+          required
+        />
+        <input
+          className="h-11 rounded border px-3 text-sm"
+          placeholder="전화번호 *"
+          value={form.phone}
+          onChange={(e) => setForm((p) => ({ ...p, phone: formatPhone(e.target.value) }))}
+          required
+        />
+        <select
+          className="h-11 rounded border px-3 text-sm"
+          value={form.role}
+          onChange={(e) => setForm((p) => ({ ...p, role: e.target.value as UserRow["role"] }))}
+        >
+          {ROLES.map((role) => (
+            <option key={role} value={role}>{ROLE_LABELS[role]}</option>
+          ))}
+        </select>
+        <button
+          type="submit"
+          disabled={creating}
+          className="h-11 rounded bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-60"
+        >
+          {creating ? "생성 중..." : "사용자 추가"}
+        </button>
+        {createError && <p className="md:col-span-6 text-xs text-red-600">{createError}</p>}
+      </form>
 
       {/* 임시 비밀번호 표시 패널 */}
       {resetResult ? (
@@ -109,10 +230,11 @@ export function UserManagementPanel({ initialUsers }: Props) {
               <tr>
                 <th className="p-3 font-semibold">이름</th>
                 <th className="p-3 font-semibold">이메일</th>
+                <th className="p-3 font-semibold">전화번호</th>
                 <th className="p-3 font-semibold">권한</th>
                 <th className="p-3 font-semibold">부서</th>
                 <th className="p-3 font-semibold">상태</th>
-                <th className="p-3 font-semibold">작업</th>
+                <th className="p-3 font-semibold w-px">작업</th>
               </tr>
             </thead>
             <tbody>
@@ -120,6 +242,21 @@ export function UserManagementPanel({ initialUsers }: Props) {
                 <tr key={user.id} className="border-b hover:bg-slate-50 transition-colors">
                   <td className="p-3 font-medium">{user.name}</td>
                   <td className="p-3 text-slate-600">{user.email}</td>
+                  <td className="p-3">
+                    <input
+                      type="text"
+                      value={phoneInputs[user.id] ?? ""}
+                      onChange={(e) =>
+                        setPhoneInputs((prev) => ({
+                          ...prev,
+                          [user.id]: formatPhone(e.target.value),
+                        }))
+                      }
+                      onBlur={() => void savePhone(user.id)}
+                      placeholder="010-0000-0000"
+                      className="h-8 w-36 bg-transparent px-2 text-xs focus:outline-none focus:border-b focus:border-blue-500"
+                    />
+                  </td>
                   <td className="p-3">
                     <select
                       className="h-9 rounded border px-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -147,8 +284,8 @@ export function UserManagementPanel({ initialUsers }: Props) {
                       {user.isActive ? "활성" : "승인 대기"}
                     </span>
                   </td>
-                  <td className="p-3">
-                    <div className="flex flex-wrap gap-2">
+                  <td className="p-3 w-px">
+                    <div className="flex gap-2 whitespace-nowrap">
                       {!user.isActive ? (
                         <ConfirmDialog
                           trigger={
@@ -199,6 +336,13 @@ export function UserManagementPanel({ initialUsers }: Props) {
                         variant="danger"
                         onConfirm={() => resetPassword(user.id)}
                       />
+                      <button
+                        type="button"
+                        onClick={() => openEdit(user)}
+                        className="h-9 rounded border px-3 text-xs font-medium hover:bg-slate-50"
+                      >
+                        수정
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -232,6 +376,19 @@ export function UserManagementPanel({ initialUsers }: Props) {
                   <span className="text-xs text-slate-400">{user.department}</span>
                 ) : null}
               </div>
+              <input
+                type="text"
+                value={phoneInputs[user.id] ?? ""}
+                onChange={(e) =>
+                  setPhoneInputs((prev) => ({
+                    ...prev,
+                    [user.id]: formatPhone(e.target.value),
+                  }))
+                }
+                onBlur={() => void savePhone(user.id)}
+                placeholder="010-0000-0000"
+                className="h-9 w-full bg-transparent px-3 text-sm focus:outline-none focus:border-b focus:border-blue-500"
+              />
               <div className="flex flex-wrap gap-2">
                 <ConfirmDialog
                   trigger={
@@ -265,11 +422,71 @@ export function UserManagementPanel({ initialUsers }: Props) {
                   variant="danger"
                   onConfirm={() => resetPassword(user.id)}
                 />
+                <button
+                  type="button"
+                  onClick={() => openEdit(user)}
+                  className="h-9 rounded border px-3 text-xs font-medium hover:bg-slate-50"
+                >
+                  수정
+                </button>
               </div>
             </div>
           ))}
         </div>
       </div>
+      {/* 수정 모달 */}
+      <Dialog open={!!editingUser} onOpenChange={(open) => { if (!open) setEditingUser(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>사용자 수정</DialogTitle>
+            <DialogDescription>{editingUser?.email}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">이름</label>
+              <input
+                className="w-full rounded border px-3 py-2 text-sm"
+                value={editForm.name}
+                onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">전화번호</label>
+              <input
+                className="w-full rounded border px-3 py-2 text-sm"
+                value={editForm.phone}
+                onChange={(e) => setEditForm((p) => ({ ...p, phone: formatPhone(e.target.value) }))}
+                placeholder="010-0000-0000"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium">부서</label>
+              <input
+                className="w-full rounded border px-3 py-2 text-sm"
+                value={editForm.department}
+                onChange={(e) => setEditForm((p) => ({ ...p, department: e.target.value }))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <button
+              type="button"
+              className="rounded border px-4 py-2 text-sm"
+              onClick={() => setEditingUser(null)}
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              className="rounded bg-blue-600 px-4 py-2 text-sm text-white disabled:opacity-60"
+              onClick={() => void saveEdit()}
+              disabled={editSaving}
+            >
+              {editSaving ? "저장 중..." : "저장"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

@@ -6,7 +6,7 @@ import { KNOWN_PERSONAL_FOLDERS } from "@/lib/drive-config";
 
 export async function listUsers() {
   return prisma.user.findMany({
-    orderBy: { createdAt: "desc" },
+    orderBy: { name: "asc" },
   });
 }
 
