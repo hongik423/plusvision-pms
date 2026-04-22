@@ -3,11 +3,11 @@ import { STAGE_NAMES } from "@/lib/constants";
 
 export async function dashboardStats(userId: string) {
   const [totalProjects, activeProjects, completedProjects, holdProjects, myTasks] = await Promise.all([
-    prisma.project.count(),
-    prisma.project.count({ where: { status: "ACTIVE" } }),
-    prisma.project.count({ where: { status: "COMPLETED" } }),
-    prisma.project.count({ where: { status: "HOLD" } }),
-    prisma.projectStage.count({ where: { assigneeId: userId, status: "ACTIVE" } }),
+    prisma.project.count({ where: { isArchived: false } }),
+    prisma.project.count({ where: { status: "ACTIVE", isArchived: false } }),
+    prisma.project.count({ where: { status: "COMPLETED", isArchived: false } }),
+    prisma.project.count({ where: { status: "HOLD", isArchived: false } }),
+    prisma.projectStage.count({ where: { assigneeId: userId, status: "ACTIVE", project: { isArchived: false } } }),
   ]);
 
   return { totalProjects, activeProjects, completedProjects, holdProjects, myTasks };
@@ -15,7 +15,11 @@ export async function dashboardStats(userId: string) {
 
 export async function dashboardMyTasks(userId: string) {
   return prisma.projectStage.findMany({
-    where: { assigneeId: userId, status: "ACTIVE" },
+    where: {
+      assigneeId: userId,
+      status: "ACTIVE",
+      project: { isArchived: false, status: { in: ["PENDING", "ACTIVE"] } },
+    },
     include: { project: true },
     orderBy: { updatedAt: "desc" },
   });
@@ -32,6 +36,7 @@ export async function recentActivities() {
 export async function stageDistribution() {
   const grouped = await prisma.project.groupBy({
     by: ["currentStage"],
+    where: { isArchived: false, status: { in: ["PENDING", "ACTIVE"] } },
     _count: { _all: true },
     orderBy: { currentStage: "asc" },
   });
@@ -88,31 +93,45 @@ export async function monthlyPerformance(months = 6) {
 /** MaxClientsInSessionMode 방지: 단일 트랜잭션에서 모든 쿼리 실행 (1개 연결 사용) */
 export async function fetchAllDashboardData(userId: string) {
   return prisma.$transaction(async (tx) => {
-    const [totalProjects, activeProjects, completedProjects, holdProjects, myTasks] = await Promise.all([
-      tx.project.count(),
-      tx.project.count({ where: { status: "ACTIVE" } }),
-      tx.project.count({ where: { status: "COMPLETED" } }),
-      tx.project.count({ where: { status: "HOLD" } }),
-      tx.projectStage.count({ where: { assigneeId: userId, status: "ACTIVE" } }),
+    const [totalProjects, activeProjects, completedProjects, cancelledProjects, holdProjects, myTasks] = await Promise.all([
+      tx.project.count({ where: { isArchived: false } }),
+      tx.project.count({ where: { status: "ACTIVE", isArchived: false } }),
+      tx.project.count({ where: { status: "COMPLETED", isArchived: false } }),
+      tx.project.count({ where: { status: "CANCELLED", isArchived: false } }),
+      tx.project.count({ where: { status: "HOLD", isArchived: false } }),
+      tx.projectStage.count({ where: { assigneeId: userId, status: "ACTIVE", project: { isArchived: false, status: { in: ["PENDING", "ACTIVE"] } } } }),
     ]);
-    const stats = { totalProjects, activeProjects, completedProjects, holdProjects, myTasks };
+    const stats = { totalProjects, activeProjects, completedProjects, cancelledProjects, holdProjects, myTasks };
 
     const tasks = await tx.projectStage.findMany({
-      where: { assigneeId: userId, status: "ACTIVE" },
+      where: {
+        assigneeId: userId,
+        status: "ACTIVE",
+        project: { isArchived: false, status: { in: ["PENDING", "ACTIVE"] } },
+      },
       include: { project: true },
       orderBy: { updatedAt: "desc" },
     });
 
-    const grouped = await tx.project.groupBy({
-      by: ["currentStage"],
-      _count: { _all: true },
+    const projectList = await tx.project.findMany({
+      where: { isArchived: false },
+      select: { id: true, name: true, currentStage: true },
       orderBy: { currentStage: "asc" },
     });
-    const distributions = grouped.map((row) => ({
-      stageNumber: row.currentStage,
-      stageName: STAGE_NAMES[row.currentStage] ?? `${row.currentStage}단계`,
-      count: row._count._all,
-    }));
+    const stageMap = new Map<number, { id: string; name: string }[]>();
+    projectList.forEach((p) => {
+      const list = stageMap.get(p.currentStage) ?? [];
+      list.push({ id: p.id, name: p.name });
+      stageMap.set(p.currentStage, list);
+    });
+    const distributions = Array.from(stageMap.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([stageNumber, projects]) => ({
+        stageNumber,
+        stageName: STAGE_NAMES[stageNumber] ?? `${stageNumber}단계`,
+        count: projects.length,
+        projects,
+      }));
 
     const activities = await tx.auditLog.findMany({
       orderBy: { createdAt: "desc" },
@@ -148,25 +167,29 @@ export async function fetchAllDashboardData(userId: string) {
 
     const workloadGrouped = await tx.projectStage.groupBy({
       by: ["assigneeId"],
-      where: { status: "ACTIVE", assigneeId: { not: null } },
+      where: { assigneeId: { not: null }, project: { isArchived: false } },
       _count: { _all: true },
     });
-    const assigneeIds = workloadGrouped
-      .map((row) => row.assigneeId)
-      .filter((value): value is string => Boolean(value));
-    const users =
-      assigneeIds.length > 0
-        ? await tx.user.findMany({ where: { id: { in: assigneeIds } }, select: { id: true, name: true } })
-        : [];
-    const nameById = new Map(users.map((u) => [u.id, u.name]));
-    const workloads = workloadGrouped
-      .filter((row): row is typeof row & { assigneeId: string } => Boolean(row.assigneeId))
-      .map((row) => ({
-        assigneeId: row.assigneeId,
-        assigneeName: nameById.get(row.assigneeId) ?? "미지정",
-        taskCount: row._count._all,
+    const taskCountById = new Map(
+      workloadGrouped
+        .filter((r): r is typeof r & { assigneeId: string } => Boolean(r.assigneeId))
+        .map((r) => [r.assigneeId, r._count._all])
+    );
+    const assigneeIds = [...taskCountById.keys()];
+    const assignees = assigneeIds.length > 0
+      ? await tx.user.findMany({
+          where: { id: { in: assigneeIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const workloads = assignees
+      .map((u) => ({
+        assigneeId: u.id,
+        assigneeName: u.name,
+        taskCount: taskCountById.get(u.id) ?? 0,
       }))
-      .sort((a, b) => b.taskCount - a.taskCount);
+      .filter((row) => row.taskCount > 0)
+      .sort((a, b) => a.assigneeName.localeCompare(b.assigneeName, "ko"));
 
     return { stats, tasks, distributions, activities, monthly, workloads };
   });
@@ -175,34 +198,31 @@ export async function fetchAllDashboardData(userId: string) {
 export async function assigneeWorkload() {
   const grouped = await prisma.projectStage.groupBy({
     by: ["assigneeId"],
-    where: {
-      status: "ACTIVE",
-      assigneeId: {
-        not: null,
-      },
-    },
-    _count: {
-      _all: true,
-    },
+    where: { status: "ACTIVE", assigneeId: { not: null }, project: { isArchived: false } },
+    _count: { _all: true },
   });
 
-  const assigneeIds = grouped
-    .map((row) => row.assigneeId)
-    .filter((value): value is string => Boolean(value));
-  const users = assigneeIds.length
-    ? await prisma.user.findMany({
-        where: { id: { in: assigneeIds } },
-        select: { id: true, name: true },
-      })
-    : [];
-  const nameById = new Map(users.map((user) => [user.id, user.name]));
+  const taskCountById = new Map(
+    grouped
+      .filter((r): r is typeof r & { assigneeId: string } => Boolean(r.assigneeId))
+      .map((r) => [r.assigneeId, r._count._all])
+  );
+  const assigneeIds = [...taskCountById.keys()];
+  if (assigneeIds.length === 0) {
+    return [];
+  }
 
-  return grouped
-    .filter((row): row is typeof row & { assigneeId: string } => Boolean(row.assigneeId))
-    .map((row) => ({
-      assigneeId: row.assigneeId,
-      assigneeName: nameById.get(row.assigneeId) ?? "미지정",
-      taskCount: row._count._all,
+  const allUsers = await prisma.user.findMany({
+    where: { id: { in: assigneeIds } },
+    select: { id: true, name: true },
+  });
+
+  return allUsers
+    .map((u) => ({
+      assigneeId: u.id,
+      assigneeName: u.name,
+      taskCount: taskCountById.get(u.id) ?? 0,
     }))
-    .sort((a, b) => b.taskCount - a.taskCount);
+    .filter((row) => row.taskCount > 0)
+    .sort((a, b) => b.taskCount - a.taskCount || a.assigneeName.localeCompare(b.assigneeName, "ko"));
 }

@@ -98,6 +98,7 @@ model Project {
   completedDate   DateTime?
   createdById     String
   copiedFromId    String?
+  isArchived      Boolean       @default(false)
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
@@ -196,6 +197,7 @@ model StageDocument {
   uploadedById  String
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
+  deletedAt     DateTime?
 
   stage      ProjectStage @relation(fields: [stageId], references: [id], onDelete: Cascade)
   uploadedBy User         @relation(fields: [uploadedById], references: [id])
@@ -203,6 +205,7 @@ model StageDocument {
   @@index([stageId])
   @@index([documentType])
   @@index([externalId])
+  @@index([deletedAt])
   @@map("stage_documents")
 }
 

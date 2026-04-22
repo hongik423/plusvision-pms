@@ -71,6 +71,7 @@ export async function checkGate(
     const docs = await prisma.stageDocument.findMany({
       where: {
         stage: { projectId, stageNumber: { in: phaseConfig.stages } },
+        deletedAt: null,
       },
       select: { documentType: true },
     });
@@ -152,7 +153,7 @@ export async function getProjectPhaseInfo(projectId: string) {
 
   const stages = await prisma.projectStage.findMany({
     where: { projectId },
-    include: { assignee: { select: { id: true, name: true } }, documents: true },
+    include: { assignee: { select: { id: true, name: true } }, documents: { where: { deletedAt: null } } },
     orderBy: { stageNumber: "asc" },
   });
 

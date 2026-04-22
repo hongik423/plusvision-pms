@@ -63,6 +63,7 @@ export async function integratedSearch({ query, dateFrom, dateTo }: SearchParams
       where: {
         ...(query.trim() ? { fileName: { contains: query, mode: "insensitive" } } : {}),
         ...docDateFilter,
+        deletedAt: null,
       },
       include: { stage: { include: { project: true } } },
       orderBy: { createdAt: "desc" },

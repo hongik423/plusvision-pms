@@ -32,6 +32,7 @@ export async function listProjects(params: {
   order?: "asc" | "desc";
   role?: "ADMIN" | "MANAGER" | "USER" | "VIEWER";
   userId?: string;
+  showArchived?: boolean;
 }) {
   const {
     page,
@@ -49,8 +50,10 @@ export async function listProjects(params: {
     order = "desc",
     role = "VIEWER",
     userId,
+    showArchived = false,
   } = params;
   const where: Prisma.ProjectWhereInput = {
+    ...(showArchived ? {} : { isArchived: false }),
     ...(role === "USER" && userId
       ? {
           OR: [
@@ -203,7 +206,7 @@ export async function getProjectById(id: string) {
       itemType: true,
       createdBy: true,
       stages: {
-        include: { assignee: true, documents: true },
+        include: { assignee: true, documents: { where: { deletedAt: null } } },
         orderBy: { stageNumber: "asc" },
       },
       members: { include: { user: true } },
@@ -223,15 +226,39 @@ export async function updateProject(
     completedDate: string;
   }>,
 ) {
-  return prisma.project.update({
-    where: { id },
-    data: {
-      ...(input.name ? { name: input.name } : {}),
-      ...(input.description !== undefined ? { description: input.description } : {}),
-      ...(input.status ? { status: input.status } : {}),
-      ...(input.dueDate ? { dueDate: new Date(input.dueDate) } : {}),
-      ...(input.completedDate ? { completedDate: new Date(input.completedDate) } : {}),
-    },
+  return prisma.$transaction(async (tx) => {
+    const updated = await tx.project.update({
+      where: { id },
+      data: {
+        ...(input.name ? { name: input.name } : {}),
+        ...(input.description !== undefined ? { description: input.description } : {}),
+        ...(input.status ? { status: input.status } : {}),
+        ...(input.dueDate ? { dueDate: new Date(input.dueDate) } : {}),
+        ...(input.completedDate
+          ? { completedDate: new Date(input.completedDate) }
+          : input.status === "COMPLETED"
+            ? { completedDate: new Date() }
+            : {}),
+      },
+    });
+
+    // 취소·보류 시 진행중인 단계를 INACTIVE로 전환
+    if (input.status === "CANCELLED" || input.status === "HOLD") {
+      await tx.projectStage.updateMany({
+        where: { projectId: id, status: "ACTIVE" },
+        data: { status: "INACTIVE" },
+      });
+    }
+
+    // 진행중으로 복귀 시 currentStage 단계를 다시 ACTIVE로 전환
+    if (input.status === "ACTIVE") {
+      await tx.projectStage.updateMany({
+        where: { projectId: id, stageNumber: updated.currentStage, status: "INACTIVE" },
+        data: { status: "ACTIVE" },
+      });
+    }
+
+    return updated;
   });
 }
 

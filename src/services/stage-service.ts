@@ -10,21 +10,27 @@ const APP_URL = process.env.NEXTAUTH_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "
 export async function listStages(projectId: string) {
   return prisma.projectStage.findMany({
     where: { projectId },
-    include: { assignee: true, documents: true },
+    include: { assignee: true, documents: { where: { deletedAt: null } } },
     orderBy: { stageNumber: "asc" },
   });
 }
 
 export async function getStage(projectId: string, stageNumber: number) {
-  return prisma.projectStage.findUnique({
-    where: {
-      projectId_stageNumber: {
-        projectId,
-        stageNumber,
-      },
+  const stage = await prisma.projectStage.findUnique({
+    where: { projectId_stageNumber: { projectId, stageNumber } },
+    include: {
+      assignee: true,
+      documents: { where: { deletedAt: null } },
     },
-    include: { assignee: true, documents: true },
   });
+  if (!stage) return null;
+
+  const deletedDocuments = await prisma.stageDocument.findMany({
+    where: { stageId: stage.id, deletedAt: { not: null } },
+    orderBy: { deletedAt: "desc" },
+  });
+
+  return { ...stage, deletedDocuments };
 }
 
 export async function updateStageDates({

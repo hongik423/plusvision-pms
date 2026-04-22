@@ -9,7 +9,13 @@ import {
   Tooltip,
   ResponsiveContainer,
   LabelList,
+  Cell,
 } from "recharts";
+
+const COLORS = [
+  "#6366f1", "#3b82f6", "#10b981", "#f59e0b",
+  "#ec4899", "#8b5cf6", "#0ea5e9", "#f97316",
+];
 
 type WorkloadRow = {
   assigneeId: string;
@@ -31,28 +37,39 @@ export function AssigneeWorkloadChart({ data }: { data: WorkloadRow[] }) {
   }));
 
   return (
-    <ResponsiveContainer width="100%" height={Math.max(160, chartData.length * 48)}>
+    <ResponsiveContainer width="100%" height={320}>
       <BarChart
         data={chartData}
-        layout="vertical"
-        margin={{ top: 8, right: 48, left: 8, bottom: 8 }}
+        layout="horizontal"
+        margin={{ top: 16, right: 24, left: 16, bottom: 32 }}
       >
-        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-        <XAxis type="number" allowDecimals={false} tick={{ fontSize: 12, fill: "#64748b" }} />
-        <YAxis
+        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+        <XAxis
           type="category"
           dataKey="name"
-          tick={{ fontSize: 13, fill: "#334155" }}
-          width={72}
+          tick={{ fontSize: 12, fill: "#64748b" }}
+          interval={0}
+          angle={-20}
+          textAnchor="end"
+          height={60}
+        />
+        <YAxis
+          type="number"
+          allowDecimals={false}
+          tick={{ fontSize: 12, fill: "#64748b" }}
+          width={40}
         />
         <Tooltip
           formatter={(value: number) => [`${value}건`, "담당 업무"]}
           contentStyle={{ fontSize: 13, borderRadius: 8 }}
         />
-        <Bar dataKey="업무수" fill="#6366f1" radius={[0, 4, 4, 0]} maxBarSize={32}>
+        <Bar dataKey="업무수" radius={[4, 4, 0, 0]} maxBarSize={48}>
+          {chartData.map((_, i) => (
+            <Cell key={i} fill={COLORS[i % COLORS.length]} />
+          ))}
           <LabelList
             dataKey="업무수"
-            position="right"
+            position="top"
             style={{ fontSize: 12, fill: "#334155" }}
             formatter={(v: number) => `${v}건`}
           />

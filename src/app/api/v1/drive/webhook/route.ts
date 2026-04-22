@@ -19,44 +19,19 @@
  */
 
 import { ok, fail } from "@/lib/api-response";
-import { handleWebhookSync } from "@/services/drive-sync-service";
 
-// ── POST — 웹훅 수신 ─────────────────────
+// ── POST — 웹훅 수신 (자동 동기화 비활성화) ─────────────────────
 export async function POST(request: Request) {
   const channelId     = request.headers.get("X-Goog-Channel-ID") ?? "";
   const channelToken  = request.headers.get("X-Goog-Channel-Token") ?? "";
   const resourceState = request.headers.get("X-Goog-Resource-State") ?? "";
-  const resourceId    = request.headers.get("X-Goog-Resource-ID") ?? "";
 
-  // 필수 헤더 누락 — Google 요청이 아닌 경우
   if (!channelId || !channelToken || !resourceState) {
     return fail({ code: "BAD_REQUEST", message: "필수 헤더 누락" }, 400);
   }
 
-  try {
-    const result = await handleWebhookSync(channelId, channelToken, resourceState);
-
-    // 동기화가 수행된 경우만 로그 출력 (sync 상태는 초기 확인 메시지로 skip)
-    if (result.synced && result.result) {
-      console.log(
-        `[Drive Webhook] ${channelId.slice(0, 8)}... | state=${resourceState} | resource=${resourceId.slice(0, 8)}... | 동기화: ${result.result.success}건 성공, ${result.result.failed}건 실패`,
-      );
-    }
-
-    // Google은 200 응답을 받아야 재시도 안 함
-    return ok({
-      received: true,
-      resourceState,
-      synced:   result.synced,
-      summary:  result.result
-        ? { success: result.result.success, skipped: result.result.skipped, failed: result.result.failed }
-        : null,
-    });
-  } catch (error) {
-    // 오류가 발생해도 200을 반환해야 Google이 재시도하지 않음
-    console.error("[Drive Webhook] 처리 오류:", error);
-    return ok({ received: true, resourceState, synced: false, error: "internal" });
-  }
+  // Google은 200을 받아야 재시도하지 않음 — 동기화는 수행하지 않음
+  return ok({ received: true, resourceState, synced: false });
 }
 
 // ── GET — 헬스 체크 ──────────────────────

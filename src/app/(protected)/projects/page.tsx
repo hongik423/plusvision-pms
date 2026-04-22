@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { PROJECT_STATUS_LABELS, PROJECT_STATUS_COLORS } from "@/lib/constants";
 import { requireSession } from "@/lib/rbac";
 import ProjectSearchInput from "@/components/projects/project-search-input";
+import { ArchiveButton } from "@/components/projects/archive-button";
 
 // 서버사이드 캐싱 비활성화 — DB 변경 즉시 반영
 export const dynamic = "force-dynamic";
@@ -47,6 +48,8 @@ export default async function ProjectsPage({
   const assigneeId = readParam(searchParams, "assigneeId") ?? undefined;
   const dateFrom = readParam(searchParams, "dateFrom") ?? undefined;
   const dateTo = readParam(searchParams, "dateTo") ?? undefined;
+  const showArchived = readParam(searchParams, "showArchived") === "true";
+  const canManage = role === "ADMIN" || role === "MANAGER";
 
   let rows: Awaited<ReturnType<typeof listProjects>>["rows"] = [];
   let total = 0;
@@ -75,6 +78,7 @@ export default async function ProjectsPage({
         order,
         role,
         userId,
+        showArchived,
       }),
       prisma.customer.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
       prisma.site.findMany({ where: { isActive: true }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
@@ -269,6 +273,16 @@ export default async function ProjectsPage({
               필터 초기화
             </a>
           )}
+          {canManage && (
+            <Link
+              href={showArchived ? "/projects" : "/projects?showArchived=true"}
+              className={`ml-auto h-11 flex items-center gap-2 rounded border px-4 text-sm font-medium transition-colors ${
+                showArchived ? "border-amber-400 bg-amber-50 text-amber-700" : "border-slate-300 text-slate-500 hover:bg-slate-50"
+              }`}
+            >
+              {showArchived ? "보관함 숨기기" : "보관함 보기"}
+            </Link>
+          )}
         </div>
       </form>
 
@@ -315,6 +329,7 @@ export default async function ProjectsPage({
                 <th className="p-3 font-semibold text-slate-600">현재 단계</th>
                 <th className="p-3 font-semibold text-slate-600">진행률</th>
                 <th className="p-3 font-semibold text-slate-600">현재 담당자</th>
+                {canManage && <th className="p-3 font-semibold text-slate-600"></th>}
               </tr>
             </thead>
             <tbody>
@@ -328,12 +343,17 @@ export default async function ProjectsPage({
                 const completedStages = row.stages.filter((s) => s.status === "COMPLETED").length;
                 const progress = Math.round((completedStages / 10) * 100);
                 return (
-                  <tr key={row.id} className="h-14 border-b text-sm hover:bg-slate-50 transition-colors">
+                  <tr key={row.id} className={`h-14 border-b text-sm transition-colors ${row.isArchived ? "bg-slate-50 opacity-60" : "hover:bg-slate-50"}`}>
                     <td className="p-3 font-mono text-xs text-slate-500">{row.projectNumber}</td>
                     <td className="p-3">
-                      <Link href={`/projects/${row.id}`} className="font-semibold hover:text-blue-600 hover:underline">
-                        {row.name}
-                      </Link>
+                      <div className="flex items-center gap-2">
+                        <Link href={`/projects/${row.id}`} className="font-semibold hover:text-blue-600 hover:underline">
+                          {row.name}
+                        </Link>
+                        {row.isArchived && (
+                          <span className="rounded bg-slate-200 px-1.5 py-0.5 text-[10px] text-slate-500">보관됨</span>
+                        )}
+                      </div>
                     </td>
                     <td className="p-3 text-slate-600">{row.customer.name}</td>
                     <td className="p-3">
@@ -346,6 +366,11 @@ export default async function ProjectsPage({
                     </td>
                     <td className="p-3 text-slate-600 text-xs">{progress}%</td>
                     <td className="p-3 text-slate-600 text-xs">{assigneeName}</td>
+                    {canManage && (
+                      <td className="p-3">
+                        <ArchiveButton projectId={row.id} isArchived={row.isArchived} />
+                      </td>
+                    )}
                   </tr>
                 );
               })}

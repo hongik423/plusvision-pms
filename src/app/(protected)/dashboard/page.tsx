@@ -39,12 +39,12 @@ export default async function DashboardPage({
     totalProjects: 0,
     activeProjects: 0,
     completedProjects: 0,
+    cancelledProjects: 0,
     holdProjects: 0,
     myTasks: 0,
   };
   let tasks: Awaited<ReturnType<typeof fetchAllDashboardData>>["tasks"] = [];
   let distributions: Awaited<ReturnType<typeof fetchAllDashboardData>>["distributions"] = [];
-  let activities: Awaited<ReturnType<typeof fetchAllDashboardData>>["activities"] = [];
   let monthly: Awaited<ReturnType<typeof fetchAllDashboardData>>["monthly"] = [];
   let workloads: Awaited<ReturnType<typeof fetchAllDashboardData>>["workloads"] = [];
 
@@ -53,7 +53,6 @@ export default async function DashboardPage({
     stats = data.stats;
     tasks = data.tasks;
     distributions = data.distributions;
-    activities = data.activities;
     monthly = data.monthly;
     workloads = data.workloads;
   } catch {
@@ -79,10 +78,11 @@ export default async function DashboardPage({
       ) : null}
 
       {/* 통계 카드 */}
-      <div className="grid gap-4 md:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-6">
         <StatCard title="전체 프로젝트" value={stats.totalProjects} color="blue" />
         <StatCard title="진행중" value={stats.activeProjects} color="indigo" />
         <StatCard title="완료" value={stats.completedProjects} color="green" />
+        <StatCard title="취소" value={stats.cancelledProjects} color="slate" />
         <StatCard title="보류" value={stats.holdProjects} color="amber" />
         <StatCard title="내 할일" value={stats.myTasks} color="rose" />
       </div>
@@ -116,59 +116,35 @@ export default async function DashboardPage({
         )}
       </div>
 
-      {/* 차트 행 1: 단계별 분포 + 월별 실적 */}
+      {/* 차트 행 1: 단계별 분포 + 담당자별 업무량 */}
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-xl border bg-white p-5">
-          <h2 className="mb-4 text-xl font-semibold">단계별 프로젝트 분포</h2>
+          <h2 className="mb-4 text-xl font-semibold">프로젝트 단계별 분포</h2>
           <StageDistributionChart data={distributions} />
         </div>
 
         <div className="rounded-xl border bg-white p-5">
-          <h2 className="mb-4 text-xl font-semibold">월별 완료 실적 (최근 6개월)</h2>
-          <MonthlyPerformanceChart data={monthly} />
-        </div>
-      </div>
-
-      {/* 차트 행 2: 담당자별 업무량 + 최근 활동 */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-xl border bg-white p-5">
           <h2 className="mb-4 text-xl font-semibold">담당자별 업무량</h2>
           <AssigneeWorkloadChart data={workloads} />
         </div>
+      </div>
 
-        <div className="rounded-xl border bg-white p-5">
-          <h2 className="mb-4 text-xl font-semibold">최근 활동</h2>
-          {activities.length === 0 ? (
-            <p className="text-sm text-slate-500">최근 활동이 없습니다.</p>
-          ) : (
-            <ul className="space-y-2 max-h-80 overflow-y-auto">
-              {activities.slice(0, 10).map((row) => (
-                <li key={row.id} className="rounded border px-3 py-2 text-sm">
-                  <p className="font-semibold">
-                    {row.action} · {row.entityType}
-                  </p>
-                  <p className="text-slate-600">
-                    {row.project?.name ?? "-"} · {row.user.name}
-                  </p>
-                  <p className="text-xs text-slate-400">
-                    {row.createdAt.toLocaleString("ko-KR")}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+      {/* 월별 완료 실적 */}
+      <div className="rounded-xl border bg-white p-5">
+        <h2 className="mb-4 text-xl font-semibold">월별 완료 실적 (최근 6개월)</h2>
+        <MonthlyPerformanceChart data={monthly} />
       </div>
     </section>
   );
 }
 
-type StatColor = "blue" | "indigo" | "green" | "amber" | "rose";
+type StatColor = "blue" | "indigo" | "green" | "slate" | "amber" | "rose";
 
 const COLOR_MAP: Record<StatColor, string> = {
   blue: "border-blue-100 bg-blue-50 text-blue-700",
   indigo: "border-indigo-100 bg-indigo-50 text-indigo-700",
   green: "border-green-100 bg-green-50 text-green-700",
+  slate: "border-slate-200 bg-slate-100 text-slate-500",
   amber: "border-amber-100 bg-amber-50 text-amber-700",
   rose: "border-rose-100 bg-rose-50 text-rose-700",
 };

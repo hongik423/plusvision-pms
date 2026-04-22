@@ -1,6 +1,6 @@
 import { fail, ok } from "@/lib/api-response";
 import { requireProjectAccess } from "@/lib/api-auth";
-import { getDocumentById, deleteDocument } from "@/services/document-service";
+import { getDocumentById, deleteDocument, restoreDocument } from "@/services/document-service";
 
 // ── 개별 문서 조회 ──────────────────────────────────────
 export async function GET(
@@ -16,6 +16,19 @@ export async function GET(
   }
 
   return ok(doc);
+}
+
+// ── 문서 복구 ────────────────────────────────────────────
+export async function PATCH(
+  _request: Request,
+  { params }: { params: { id: string; docId: string } },
+) {
+  const gate = await requireProjectAccess(params.id, "MANAGER");
+  if (!gate.ok) return gate.response;
+
+  const restored = await restoreDocument(params.docId);
+  if (!restored) return fail({ code: "NOT_FOUND", message: "문서를 찾을 수 없습니다." }, 404);
+  return ok({ restored: true, id: params.docId });
 }
 
 // ── 문서 삭제 (Storage + DB + 감사 로그) ────────────────

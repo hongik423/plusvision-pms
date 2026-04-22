@@ -7,10 +7,10 @@ import { generateDocumentNumber, buildDriveFileName } from "@/lib/naming-convent
 
 const BUCKET = "projects";
 
-// ── 문서 목록 조회 ──────────────────────────────────────────
+// ── 문서 목록 조회 (소프트 삭제된 파일 제외) ──────────────────
 export async function listProjectDocuments(projectId: string) {
   return prisma.stageDocument.findMany({
-    where: { stage: { projectId } },
+    where: { stage: { projectId }, deletedAt: null },
     include: { uploadedBy: true, stage: true },
     orderBy: { createdAt: "desc" },
   });
@@ -73,16 +73,36 @@ export async function uploadProjectDocument(input: {
 
   // ── Supabase Storage 업로드 ──
   const buffer = Buffer.from(await input.file.arrayBuffer());
+
+  // 확장자 기준으로 MIME 타입 결정 — 생성 툴마다 다른 비표준 MIME 타입 무시
+  const EXT_MIME: Record<string, string> = {
+    ".pdf":  "application/pdf",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".xls":  "application/vnd.ms-excel",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".doc":  "application/msword",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".ppt":  "application/vnd.ms-powerpoint",
+    ".hwp":  "application/x-hwp",
+    ".hwpx": "application/hwp+zip",
+    ".dwg":  "image/vnd.dwg",
+    ".dxf":  "image/vnd.dxf",
+    ".jpg":  "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png":  "image/png",
+    ".gif":  "image/gif",
+  };
+  const fileExt = input.file.name.slice(input.file.name.lastIndexOf(".")).toLowerCase();
+  const normalizedMimeType = EXT_MIME[fileExt] ?? input.file.type;
   // 넘버링이 있으면 파일명에 접두사 부여
   const storedFileName = documentNumber
     ? buildDriveFileName(documentNumber, input.file.name)
     : input.file.name;
-  // Supabase Storage key에서 대괄호, 공백 등 허용되지 않는 문자 제거
-  const safeFileName = storedFileName.replace(/[\[\]]/g, "").replace(/\s+/g, "_");
-  const key = `${input.projectId}/stage-${input.stageNumber}/${Date.now()}-${safeFileName}`;
+  // Storage key는 ASCII만 허용 — 확장자만 유지하고 나머지는 타임스탬프로 대체
+  const key = `${input.projectId}/stage-${input.stageNumber}/${Date.now()}${fileExt}`;
   const supabaseAdmin = getSupabaseAdmin();
   const upload = await supabaseAdmin.storage.from(BUCKET).upload(key, buffer, {
-    contentType: input.file.type,
+    contentType: "application/octet-stream",
     upsert: false,
   });
   if (upload.error) {
@@ -100,7 +120,7 @@ export async function uploadProjectDocument(input: {
       fileName: storedFileName,
       fileUrl: urlData.data.publicUrl,
       fileSize: input.file.size,
-      mimeType: input.file.type,
+      mimeType: normalizedMimeType,
       version: nextVersion,
       uploadedById: input.uploadedById,
       description: finalDescription,
@@ -153,38 +173,19 @@ export async function getDocumentVersions(stageId: string, fileName: string) {
   });
 }
 
-// ── 문서 삭제 (Storage 파일도 삭제 + 감사 로그) ─────────────
+// ── 문서 삭제 (소프트 삭제 — 30일 후 자동 완전 삭제) ──────────
 export async function deleteDocument(docId: string, deletedById: string) {
   const doc = await prisma.stageDocument.findUnique({
-    where: { id: docId },
+    where: { id: docId, deletedAt: null },
     include: { stage: { select: { projectId: true, stageNumber: true } } },
   });
-  if (!doc) {
-    return null;
-  }
+  if (!doc) return null;
 
-  // ── Supabase Storage에서 실제 파일 삭제 ──
-  if (doc.storageType === "SUPABASE" && doc.fileUrl) {
-    try {
-      const marker = `/storage/v1/object/public/${BUCKET}/`;
-      const idx = doc.fileUrl.indexOf(marker);
-      if (idx >= 0) {
-        const storageKey = doc.fileUrl.slice(idx + marker.length);
-        const supabaseAdmin = getSupabaseAdmin();
-        const { error } = await supabaseAdmin.storage.from(BUCKET).remove([storageKey]);
-        if (error) {
-          console.error("[DocumentService] Storage 파일 삭제 실패:", error.message);
-        }
-      }
-    } catch (err) {
-      console.error("[DocumentService] Storage 파일 삭제 중 오류:", err);
-    }
-  }
+  const deleted = await prisma.stageDocument.update({
+    where: { id: docId },
+    data: { deletedAt: new Date() },
+  });
 
-  // ── DB 삭제 ──
-  const deleted = await prisma.stageDocument.delete({ where: { id: docId } });
-
-  // ── 감사 로그 ──
   await logAudit({
     userId: deletedById,
     projectId: doc.stage.projectId,
@@ -201,4 +202,44 @@ export async function deleteDocument(docId: string, deletedById: string) {
   });
 
   return deleted;
+}
+
+// ── 문서 복구 (deletedAt 제거) ───────────────────────────────
+export async function restoreDocument(docId: string) {
+  const doc = await prisma.stageDocument.findUnique({
+    where: { id: docId },
+  });
+  if (!doc || !doc.deletedAt) return null;
+
+  return prisma.stageDocument.update({
+    where: { id: docId },
+    data: { deletedAt: null },
+  });
+}
+
+// ── 30일 경과 파일 완전 삭제 (cron용) ───────────────────────
+export async function purgeExpiredDocuments() {
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const expired = await prisma.stageDocument.findMany({
+    where: { deletedAt: { lte: cutoff } },
+  });
+
+  const supabaseAdmin = getSupabaseAdmin();
+  for (const doc of expired) {
+    if (doc.storageType === "SUPABASE" && doc.fileUrl) {
+      try {
+        const marker = `/storage/v1/object/public/${BUCKET}/`;
+        const idx = doc.fileUrl.indexOf(marker);
+        if (idx >= 0) {
+          const storageKey = doc.fileUrl.slice(idx + marker.length);
+          await supabaseAdmin.storage.from(BUCKET).remove([storageKey]);
+        }
+      } catch (err) {
+        console.error("[purgeExpiredDocuments] Storage 삭제 실패:", err);
+      }
+    }
+    await prisma.stageDocument.delete({ where: { id: doc.id } });
+  }
+
+  return expired.length;
 }

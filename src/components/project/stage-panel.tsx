@@ -131,6 +131,9 @@ export function StagePanel({
   const [docsLoading, setDocsLoading] = useState(false);
   const [docsFetched, setDocsFetched] = useState(false);
 
+  const [deletedDocs, setDeletedDocs] = useState<StageDoc[]>([]);
+  const [showDeleted, setShowDeleted] = useState(false);
+
   const fetchDocs = useCallback(async () => {
     if (docsFetched) return;
     setDocsLoading(true);
@@ -139,6 +142,9 @@ export function StagePanel({
       const payload = await res.json();
       if (payload.success && payload.data?.documents) {
         setDocs(payload.data.documents);
+      }
+      if (payload.success && payload.data?.deletedDocuments) {
+        setDeletedDocs(payload.data.deletedDocuments);
       }
     } catch {
       // 조회 실패 시 빈 배열 유지
@@ -174,6 +180,24 @@ export function StagePanel({
       : stage.status === "ACTIVE"
       ? "bg-blue-500 text-white animate-pulse"
       : "bg-gray-200 text-gray-600";
+
+  async function handleDelete(docId: string) {
+    const res = await fetch(`/api/v1/projects/${projectId}/documents/${docId}`, { method: "DELETE" });
+    const payload = await res.json();
+    if (!payload.success) { toast.error("삭제에 실패했습니다."); return; }
+    toast.success("파일을 삭제했습니다. 30일 내 복구 가능합니다.");
+    setDocsFetched(false);
+    void fetchDocs();
+  }
+
+  async function handleRestore(docId: string) {
+    const res = await fetch(`/api/v1/projects/${projectId}/documents/${docId}`, { method: "PATCH" });
+    const payload = await res.json();
+    if (!payload.success) { toast.error("복구에 실패했습니다."); return; }
+    toast.success("파일을 복구했습니다.");
+    setDocsFetched(false);
+    void fetchDocs();
+  }
 
   async function handleUpload() {
     if (!uploadFile) { toast.warning("파일을 선택해 주세요."); return; }
@@ -424,10 +448,26 @@ export function StagePanel({
                         <span>{new Date(doc.createdAt).toLocaleDateString("ko-KR")}</span>
                       </div>
                     </div>
-                    <a href={doc.fileUrl} target="_blank" rel="noreferrer"
-                      className="flex-shrink-0 rounded border px-2 py-1 text-[10px] font-medium hover:bg-slate-100">
-                      열기
-                    </a>
+                    <div className="flex-shrink-0 flex gap-1">
+                      <a href={doc.fileUrl} target="_blank" rel="noreferrer"
+                        className="rounded border px-2 py-1 text-[10px] font-medium hover:bg-slate-100">
+                        다운로드
+                      </a>
+                      {canManage && (
+                        <ConfirmDialog
+                          trigger={
+                            <button type="button" className="rounded border border-red-200 px-2 py-1 text-[10px] font-medium text-red-500 hover:bg-red-50">
+                              삭제
+                            </button>
+                          }
+                          title="파일 삭제"
+                          description={`"${doc.fileName}" 파일을 삭제합니다. 복구할 수 없습니다.`}
+                          confirmLabel="삭제"
+                          variant="danger"
+                          onConfirm={() => handleDelete(doc.id)}
+                        />
+                      )}
+                    </div>
                   </li>
                 ))}
                 {/* Drive 동기화 완료 파일 */}
@@ -456,15 +496,68 @@ export function StagePanel({
                         <span>{new Date(doc.createdAt).toLocaleDateString("ko-KR")}</span>
                       </div>
                     </div>
-                    <a href={doc.fileUrl} target="_blank" rel="noreferrer"
-                      className="flex-shrink-0 rounded border border-green-300 bg-green-50 px-2 py-1 text-[10px] font-medium text-green-700 hover:bg-green-100">
-                      열기
-                    </a>
+                    <div className="flex-shrink-0 flex gap-1">
+                      <a href={doc.fileUrl} target="_blank" rel="noreferrer"
+                        className="rounded border border-green-300 bg-green-50 px-2 py-1 text-[10px] font-medium text-green-700 hover:bg-green-100">
+                        다운로드
+                      </a>
+                      {canManage && (
+                        <ConfirmDialog
+                          trigger={
+                            <button type="button" className="rounded border border-red-200 px-2 py-1 text-[10px] font-medium text-red-500 hover:bg-red-50">
+                              삭제
+                            </button>
+                          }
+                          title="파일 삭제"
+                          description={`"${doc.fileName}" 파일을 삭제합니다. 복구할 수 없습니다.`}
+                          confirmLabel="삭제"
+                          variant="danger"
+                          onConfirm={() => handleDelete(doc.id)}
+                        />
+                      )}
+                    </div>
                   </li>
                 ))}
               </ul>
             )}
           </div>
+
+          {/* 삭제된 파일 (매니저만, 30일 내 복구 가능) */}
+          {canManage && deletedDocs.length > 0 && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowDeleted((p) => !p)}
+                className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1"
+              >
+                <span>{showDeleted ? "▲" : "▼"}</span>
+                삭제된 파일 {deletedDocs.length}건 (30일 내 복구 가능)
+              </button>
+              {showDeleted && (
+                <ul className="mt-2 space-y-1.5">
+                  {deletedDocs.map((doc) => (
+                    <li key={doc.id} className="flex items-center gap-2.5 rounded-lg border border-dashed border-red-200 bg-red-50 px-3 py-2 opacity-70">
+                      <span className="text-lg flex-shrink-0">{getFileIcon(doc.fileName, doc.mimeType)}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-slate-500 truncate line-through">{doc.fileName}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">
+                          {DOCUMENT_TYPE_LABELS[doc.documentType as keyof typeof DOCUMENT_TYPE_LABELS] ?? doc.documentType}
+                          {" · "}{formatDate(doc.createdAt)}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void handleRestore(doc.id)}
+                        className="flex-shrink-0 rounded border border-blue-300 bg-white px-2 py-1 text-[10px] font-medium text-blue-600 hover:bg-blue-50"
+                      >
+                        복구
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           {/* 파일 업로드 */}
           {(canManage || isAssignee) && stage.status !== "COMPLETED" && stage.status !== "SKIPPED" && (
